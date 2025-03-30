@@ -756,7 +756,7 @@ export default {
           const runway = runwayMatch[1];
           let runwayWords = "";
           
-          // 处理跑道号的特殊情况 (00L, 00R, 18L, 18R等)
+          // 处理跑道号的特殊情况 (36L, 36R, 18L, 18R等)
           for (let i = 0; i < runway.length; i++) {
             const char = runway[i];
             if (char >= '0' && char <= '9') {
@@ -1359,11 +1359,11 @@ export default {
       ctx.fillStyle = "#fff";
       ctx.font = "bold 16px monospace";
       // 北端（顶部）是 18（朝南）
-      ctx.fillText("18L", 810, 445); // 左跑道顶部
-      ctx.fillText("18R", 950, 445); // 右跑道顶部
-      // 南端（底部）是 00（朝北）
-      ctx.fillText("00L", 810, 770); // 左跑道底部
-      ctx.fillText("00R", 950, 770); // 右跑道底部
+      ctx.fillText("18R", 810, 445); // 左跑道顶部
+      ctx.fillText("18L", 950, 445); // 右跑道顶部
+      // 南端（底部）是 36（朝北）
+      ctx.fillText("36L", 810, 770); // 左跑道底部
+      ctx.fillText("36R", 950, 770); // 右跑道底部
 
       // 绘制雷达环
       ctx.strokeStyle = "#004433";
@@ -1982,30 +1982,30 @@ export default {
           let success = false;
 
           if (y < 460 && (onLeftRunway || onRightRunway)) {
-            // 北端起飞，朝南 (18L/18R runway - heading 180)
+            // 北端起飞，朝南 (18R/18L runway - heading 180)
             plane.heading = 180;
             plane.targetHeading = 180;
             plane.state = "TAKEOFF";
             plane.speed = 0.2 * this.speedLevel;
             
-            const runwayId = onLeftRunway ? "18L" : "18R";
+            const runwayId = onLeftRunway ? "18R" : "18L";
             const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
             this.speak(message);
             
-            console.log("Taking off southbound from 18L/18R, heading:", plane.heading);
+            console.log("Taking off southbound from 18R/18L, heading:", plane.heading);
             success = true;
           } else if (y > 740 && (onLeftRunway || onRightRunway)) {
-            // 南端起飞，朝北 (00L/00R runway - heading 0)
+            // 南端起飞，朝北 (36L/36R runway - heading 0)
             plane.heading = 0;
             plane.targetHeading = 0;
             plane.state = "TAKEOFF";
             plane.speed = 0.2 * this.speedLevel;
             
-            const runwayId = onLeftRunway ? "00L" : "00R";
+            const runwayId = onLeftRunway ? "36L" : "36R";
             const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
             this.speak(message);
             
-            console.log("Taking off northbound from 00L/00R, heading:", plane.heading);
+            console.log("Taking off northbound from 36L/36R, heading:", plane.heading);
             success = true;
           }
           
@@ -2275,12 +2275,12 @@ export default {
     checkNearRunwayEntrance(x, y) {
       // 定义跑道入口区域 - 扩大检测半径以提高检测精度
       const runwayEntrances = [
-        // 南侧跑道入口 (00L/00R) - 放在前面优先检查
-        { x: 830, y: 770, id: "00L", direction: 0, type: "south", radius: 50 },
-        { x: 970, y: 770, id: "00R", direction: 0, type: "south", radius: 50 },
-        // 北侧跑道入口 (18L/18R)
-        { x: 830, y: 430, id: "18L", direction: 180, type: "north", radius: 50 },
-        { x: 970, y: 430, id: "18R", direction: 180, type: "north", radius: 50 }
+        // 南侧跑道入口 (36L/36R) - 放在前面优先检查
+        { x: 830, y: 770, id: "36L", direction: 0, type: "south", radius: 50 },
+        { x: 970, y: 770, id: "36R", direction: 0, type: "south", radius: 50 },
+        // 北侧跑道入口 (18R/18L)
+        { x: 830, y: 430, id: "18R", direction: 180, type: "north", radius: 50 },
+        { x: 970, y: 430, id: "18L", direction: 180, type: "north", radius: 50 }
       ];
       
       // 检查是否接近任一跑道入口
@@ -3383,8 +3383,8 @@ export default {
         
         // 未识别的指令
         this.addToCommunicationLog(isEnglish 
-          ? `Command not recognized. Use standard ATC phrases like "turn heading 180" or "cleared to land runway 00L"`
-          : `Command not recognized. Use standard ATC phrases like "turn heading 180" or "cleared to land runway 00L"`);
+          ? `Command not recognized. Use standard ATC phrases like "turn heading 180" or "cleared to land runway 36L"`
+          : `Command not recognized. Use standard ATC phrases like "turn heading 180" or "cleared to land runway 36L"`);
       } catch (processingError) {
         console.error('Error processing voice command::', processingError);
         this.addToCommunicationLog(isEnglish 
@@ -3545,13 +3545,13 @@ export default {
         // 提取跑道号 - 只支持标准格式
         let runwayId = null;
         if (isEnglish) {
-          // 英文标准格式: "land runway 00L"
+          // 英文标准格式: "land runway 36L"
           const runwayMatch = command.match(/runway\s+(\d{2})([LRCrlc]?)/i);
           if (runwayMatch) {
             runwayId = runwayMatch[1] + (runwayMatch[2] ? runwayMatch[2].toUpperCase() : '');
           }
         } else {
-          // 中文标准格式: "着陆跑道00左"
+          // 中文标准格式: "着陆跑道36左"
           const runwayMatch = command.match(/跑道\s*(\d{2})([左右中]?)/i);
           if (runwayMatch) {
             const directionMap = { '左': 'L', '右': 'R', '中': 'C' };
@@ -3563,8 +3563,8 @@ export default {
         // 验证跑道ID
         if (!runwayId) {
           this.addToCommunicationLog(isEnglish 
-            ? `${planeId}, please specify runway for landing (e.g. "land runway 00L")`
-            : `${planeId}，请指定着陆跑道（例如"着陆跑道00左"）`);
+            ? `${planeId}, please specify runway for landing (e.g. "land runway 36L")`
+            : `${planeId}，请指定着陆跑道（例如"着陆跑道36左"）`);
           return;
         }
         
@@ -3639,7 +3639,7 @@ export default {
     // 获取跑道入口坐标
     getRunwayEntrance(runway) {
       // 根据跑道朝向确定入口位置
-      if (runway.heading === 0) {  // 朝北跑道 (00L/00R)
+      if (runway.heading === 0) {  // 朝北跑道 (36L/36R)
         return { x: runway.startX, y: runway.startY - 50 };
       } else if (runway.heading === 180) {  // 朝南跑道 (18L/18R)
         return { x: runway.startX, y: runway.startY + 50 };
@@ -3731,13 +3731,13 @@ export default {
         
         // 从指令中提取跑道号 - 标准格式
         if (isEnglish) {
-          // 英文标准格式："take off runway 00L"
+          // 英文标准格式："take off runway 36L"
           const runwayMatch = command.match(/runway\s+(\d{2})([LRCrlc]?)/i);
           if (runwayMatch) {
             runwayId = runwayMatch[1] + (runwayMatch[2] ? runwayMatch[2].toUpperCase() : '');
           }
         } else {
-          // 中文标准格式："起飞跑道00左"
+          // 中文标准格式："起飞跑道36左"
           const runwayMatch = command.match(/跑道\s*(\d{2})([左右中]?)/i);
           if (runwayMatch) {
             const directionMap = { '左': 'L', '右': 'R', '中': 'C' };
@@ -3816,8 +3816,8 @@ export default {
         } else {
           // Aircraft not on runway, unable to take off
           this.addToCommunicationLog(isEnglish
-            ? `${planeId} not on runway. Please specify runway (e.g. "takeoff runway 00L")`
-            : `${planeId}不在跑道上。请指定跑道（例如"起飞跑道00左"）`);
+            ? `${planeId} not on runway. Please specify runway (e.g. "takeoff runway 36L")`
+            : `${planeId}不在跑道上。请指定跑道（例如"起飞跑道36左"）`);
         }
       } catch (error) {
         console.error('处理起飞指令时出错:', error);
@@ -3837,10 +3837,10 @@ export default {
         
         // 获取跑道入口信息
         const entrances = {
-          "18L": { x: 830, y: 430 },
-          "18R": { x: 970, y: 430 },
-          "00L": { x: 830, y: 770 },
-          "00R": { x: 970, y: 770 }
+          "18L": { x: 970, y: 430 },
+          "18R": { x: 830, y: 430 },
+          "36L": { x: 830, y: 770 },
+          "36R": { x: 970, y: 770 }
         };
         
         // 确保进场计算有效
