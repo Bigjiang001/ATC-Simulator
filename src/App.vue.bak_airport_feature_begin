@@ -1,0 +1,838 @@
+<template>
+  <div id="app" @keydown="onKeyDown" @keyup="onKeyUp" tabindex="0">
+    <div class="controls-container">
+      <!-- 游戏控制按钮 -->
+      <div class="game-controls">
+        <button @click="startGame" :disabled="gameStatus === 'running'">Start</button>
+        <button @click="pauseGame" :disabled="gameStatus !== 'running'">Pause</button>
+        <button @click="endGame" :disabled="gameStatus === 'ended'">End</button>
+        
+        <!-- 添加难度选择下拉菜单 -->
+        <div class="difficulty-select">
+          <span>Difficulty:</span>
+          <select v-model="difficulty" :disabled="gameStatus === 'running'">
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+            <option value="expert">Expert</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 速度控制 -->
+      <div class="speed-control">
+        <span>Speed Level:</span>
+        <button @click="decreaseSpeed" :class="{ active: speedLevel < 1 }">
+          ←
+        </button>
+        <button @click="resetSpeed" :class="{ active: speedLevel === 1 }">
+          Standard
+        </button>
+        <button @click="increaseSpeed" :class="{ active: speedLevel > 1 }">
+          →
+        </button>
+        <span class="speed-display">{{ speedLevel.toFixed(2) }}x</span>
+      </div>
+    </div>
+
+    <div class="radar-container">
+      <!-- 雷达屏幕 -->
+    <canvas
+      ref="radarCanvas"
+        width="1800"
+        height="1200"
+      @mousedown="startDrag"
+      @mousemove="onDrag"
+      @mouseup="endDrag"
+    ></canvas>
+
+      <!-- 通话记录窗口 - 修改为可滚动，最新消息在顶部 -->
+      <div class="comm-container">
+        <div ref="communicationLog" class="communication-log">
+          <div v-for="(message, index) in allCommunicationLog" :key="index" class="log-entry">
+            {{ message }}
+          </div>
+        </div>
+        
+        <!-- 添加语音通话按钮 -->
+        <div class="voice-command-container">
+          <div v-if="voiceCommandText" class="recognized-text">{{ voiceCommandText }}</div>
+          <button 
+            @mousedown="startVoiceCommand" 
+            @mouseup="stopVoiceCommand"
+            @mouseleave="stopVoiceCommand"
+            :class="{ 'active': isRecording }"
+            class="voice-command-button"
+          >
+            Talk
+      </button>
+          <div v-if="isRecording" class="recording-indicator">Recording...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+body {
+  margin: 0;
+  background-color: #000;
+  color: #00ffcc;
+  font-family: monospace;
+}
+#app {
+  position: relative;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.controls-container {
+  width: 100%;
+  max-width: 1800px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 10px 0;
+}
+.radar-container {
+  position: relative;
+  width: 100%;
+  max-width: 1800px;
+}
+canvas {
+  border: 2px solid #00ffcc;
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.command-box {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #001010;
+  color: #00ffcc;
+  padding: 10px 20px;
+  font-size: 18px;
+  border: 1px solid #00ffcc;
+  border-radius: 8px;
+  z-index: 10;
+}
+.speed-control {
+  color: #00ffcc;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+}
+.speed-control span {
+  margin-right: 10px;
+}
+.speed-control button {
+  margin-left: 5px;
+  background: none;
+  border: 1px solid #00ffcc;
+  color: #00ffcc;
+  padding: 4px 8px;
+  cursor: pointer;
+  min-width: 30px;
+}
+.speed-control button:nth-child(2),
+.speed-control button:nth-child(4) {
+  min-width: 20px;
+}
+.speed-control button:nth-child(3) {
+  min-width: 80px;
+}
+.speed-control button.active {
+  background-color: #00ffcc;
+  color: #000;
+}
+/* 游戏控制按钮样式 */
+.game-controls {
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.game-controls button {
+  background: none;
+  border: 1px solid #00ffcc;
+  color: #00ffcc;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.game-controls button:hover {
+  background-color: rgba(0, 255, 204, 0.2);
+}
+.game-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 添加难度选择下拉菜单样式 */
+.difficulty-select, .language-select {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #00ffcc;
+}
+
+.difficulty-select select, .language-select select {
+  background-color: #001010;
+  color: #00ffcc;
+  border: 1px solid #00ffcc;
+  border-radius: 4px;
+  padding: 5px;
+  cursor: pointer;
+}
+
+.difficulty-select select:disabled, .language-select select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.difficulty-select select option, .language-select select option {
+  background-color: #001010;
+  color: #00ffcc;
+}
+
+/* 将语言选择器放在难度选择器右侧 */
+.language-select {
+  margin-left: 15px;
+}
+
+/* 修改通话记录窗口样式，支持滚动，最新消息在顶部 */
+.comm-container {
+  position: relative;
+  width: 100%;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.communication-log {
+  position: relative;
+  width: 100%; /* 恢复原来的窗口大小 */
+  background-color: rgba(0, 16, 16, 0.8);
+  border: 1px solid #00ffcc;
+  border-radius: 8px;
+  padding: 10px;
+  color: #00ffcc;
+  max-height: 120px;
+  overflow-y: auto;
+  z-index: 20;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column; /* 最新消息显示在顶部 */
+  align-items: flex-start; /* 让内容左对齐 */
+}
+
+.log-entry {
+  margin: 5px 0;
+  line-height: 1.5;
+  min-height: 1.5em;
+  width: 100%; /* 确保条目占满整行 */
+  text-align: left; /* 确保文本左对齐 */
+}
+
+/* 添加语音通话按钮样式 */
+.voice-command-container {
+  position: absolute;
+  bottom: 10px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  z-index: 30;
+}
+
+.voice-command-button {
+  background-color: #003333;
+  border: 2px solid #00ffcc;
+  color: #00ffcc;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: bold;
+  width: 60px;
+  height: 40px;
+  border-radius: 0px; /* Make button square instead of round */
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-command-button:hover {
+  background-color: #004444;
+}
+
+.voice-command-button.active {
+  background-color: #00ffcc;
+  color: #003333;
+  transform: scale(1.1);
+}
+
+.recording-indicator {
+  color: #ff3333;
+  font-weight: bold;
+  animation: blink 1s infinite;
+  position: absolute;
+  top: -20px;
+  right: 0;
+}
+
+.recognized-text {
+  color: #00ffcc;
+  max-width: 300px; /* 增加最大宽度，防止文本显示不完整 */
+  margin-right: 15px;
+  white-space: normal; /* 允许文本换行 */
+  overflow: visible; /* 不裁剪溢出的内容 */
+  text-overflow: initial; /* 不使用省略号 */
+  text-align: left; /* 文本左对齐 */
+  word-wrap: break-word; /* 允许长单词换行 */
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* 添加滚动条样式 */
+.communication-log::-webkit-scrollbar {
+  width: 8px;
+}
+.communication-log::-webkit-scrollbar-track {
+  background: rgba(0, 16, 16, 0.5);
+}
+.communication-log::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 204, 0.5);
+  border-radius: 4px;
+}
+.communication-log::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 204, 0.7);
+}
+
+.keyboard-hint {
+  position: absolute;
+  bottom: -20px;
+  right: 0;
+  font-size: 12px;
+  color: #00ffcc;
+  opacity: 0.7;
+}
+
+.speed-display {
+  margin-left: 10px;
+  font-size: 14px;
+  min-width: 50px;
+  text-align: center;
+  padding: 2px 5px;
+  background-color: rgba(0, 255, 204, 0.1);
+  border-radius: 4px;
+}
+</style>
+<script>
+import airplaneImg from './assets/airplane.png';
+import { generateRandomFlightNumber } from './utils/flightUtils';
+import { radioEffects } from './sounds/radio_effects.js';
+
+// Adding constant for English mode
+const isEnglish = true; // English is now the only supported language
+
+let flightCounter = 1000;
+
+export default {
+  data() {
+    return {
+      ctx: null,
+      airplaneImage: null,
+      airplanes: [],
+      selectedPlane: null,
+      dragging: false,
+      dragLine: null,
+      speedLevel: 1, // 标准速度
+      dragFollowing: null,
+      communicationLog: ['', '', '', ''],
+      allCommunicationLog: ['', '', '', ''],
+      gameStatus: 'start',
+      gameLoopId: null,
+      spawnApproachInterval: null,
+      spawnDepartureInterval: null,
+      score: 0,
+      takeoffSpeed: 0.2, // 起飞速度，与进场飞机保持一致
+      navBeacons: [
+        { x: 100, y: 200, id: "NAV1" },
+        { x: 1700, y: 100, id: "NAV2" },
+        { x: 100, y: 1100, id: "NAV3" }
+      ],
+      // 添加难度设置
+      difficulty: 'intermediate', // 默认为中级难度
+      // 不同难度对应的飞机生成时间间隔(毫秒)
+      difficultySettings: {
+        beginner: { 
+          baseSpawnInterval: 20000,         // 基础生成间隔：20秒
+          busySpawnInterval: 15000,         // 繁忙时期生成间隔：15秒
+          calmSpawnInterval: 25000,         // 平静时期生成间隔：25秒
+          busyPhaseProbability: 0.15,       // 繁忙阶段出现概率：15%
+          calmPhaseDuration: 60000,         // 平静阶段持续时间：60秒
+        },
+        intermediate: { 
+          baseSpawnInterval: 15000,         // 基础生成间隔：15秒
+          busySpawnInterval: 10000,         // 繁忙时期生成间隔：10秒
+          calmSpawnInterval: 20000,         // 平静时期生成间隔：20秒
+          busyPhaseProbability: 0.25,       // 繁忙阶段出现概率：25%
+          calmPhaseDuration: 45000,         // 平静阶段持续时间：45秒
+        },
+        advanced: { 
+          baseSpawnInterval: 12000,         // 基础生成间隔：12秒
+          busySpawnInterval: 8000,          // 繁忙时期生成间隔：8秒
+          calmSpawnInterval: 18000,         // 平静时期生成间隔：18秒
+          busyPhaseProbability: 0.35,       // 繁忙阶段出现概率：35%
+          calmPhaseDuration: 30000,         // 平静阶段持续时间：30秒
+        },
+        expert: { 
+          baseSpawnInterval: 10000,         // 基础生成间隔：10秒
+          busySpawnInterval: 6000,          // 繁忙时期生成间隔：6秒
+          calmSpawnInterval: 15000,         // 平静时期生成间隔：15秒
+          busyPhaseProbability: 0.45,       // 繁忙阶段出现概率：45%
+          calmPhaseDuration: 20000,         // 平静阶段持续时间：20秒
+        }
+      },
+      // 添加各难度级别的最大飞机数量限制
+      maxAircraftCount: {
+        beginner: 2,      // 初级最多2架飞机
+        intermediate: 4,   // 中级最多4架飞机
+        advanced: 7,      // 高级最多7架飞机
+        expert: 12        // 专家最多12架飞机
+      },
+      // 游戏阶段相关变量
+      gamePhase: 'normal',         // 游戏阶段：normal(正常), busy(繁忙), calm(平静)
+      gamePhaseStartTime: 0,       // 当前阶段开始时间
+      phaseChangeTimeout: null,    // 阶段变更的定时器
+      currentSpawnInterval: null,  // 当前的飞机生成间隔
+      dynamicMaxAircraftCount: 0,  // 动态调整的最大飞机数量
+      gameProgressLevel: 0,        // 游戏进度等级（0-10，影响生成速度和最大飞机数）
+      gameStartTime: 0,            // 游戏开始时间，用于计算游戏进度
+      // 初级难度下，记录是否允许生成新飞机（只有当飞机消失后才允许）
+      canSpawnNewAircraft: true,
+      // 记录最后一次飞机生成的时间
+      lastSpawnTime: 0,
+      
+      // 添加语音识别相关数据
+      recognition: null,
+      isRecording: false,
+      voiceCommandText: '',
+      lastVoiceCommandTime: 0,
+      spacePressHandled: false, // 跟踪空格键是否已被处理
+      
+      shiftKeyPressed: false, // 跟踪左Shift键是否按下
+      // 状态管理
+      isLoading: true,
+      nextLogId: 1,
+      voiceRecognitionTimeout: null, // 用于防止重复启动语音识别
+      lastVoiceCommandProcessTime: 0, // 用于命令频率限制
+      continuousMode: false, // Store whether we're in continuous mode
+      gameProgressInterval: null, // 游戏进度更新定时器
+      incomingAircraft: [], // 即将出现的飞机数组
+      
+      // 游戏结束相关
+      isGameOver: false, // 游戏是否已结束
+      gameOverReason: '', // 游戏结束原因
+      gameOverMessage: '', // 游戏结束详细信息
+      problemAircraft: [], // 出问题的飞机（碰撞、飞出边界等）
+      blinkTimer: null, // 用于控制飞机闪烁
+      isBlinking: false, // 当前是否在闪烁状态
+      groundWaitingStartTimes: {}, // 记录飞机开始在地面等待的时间，格式: {planeId: timestamp}
+      safetyDistance: 50, // 飞机安全距离，小于此距离视为碰撞
+      groundWaitTimeout: 60000, // 地面等待超时时间（60秒）
+      radarBounds: { // 雷达边界，超出此范围视为飞出雷达范围
+        minX: -50, 
+        maxX: 1850, 
+        minY: -50, 
+        maxY: 1250
+      },
+      // 添加机场相关配置
+      currentAirport: 'airport-01', // 默认使用第一个机场
+      airports: {
+        'airport-01': {
+          name: 'Main Airport',
+          runways: [
+            // 南侧跑道入口 (00L/00R)
+            { x: 830, y: 770, id: "00L", direction: 0, type: "south", radius: 50 },
+            { x: 970, y: 770, id: "00R", direction: 0, type: "south", radius: 50 },
+            // 北侧跑道入口 (18L/18R)
+            { x: 830, y: 430, id: "18L", direction: 180, type: "north", radius: 50 },
+            { x: 970, y: 430, id: "18R", direction: 180, type: "north", radius: 50 }
+          ],
+          drawRunways: function(ctx) {
+            // 绘制平行跑道
+            ctx.fillStyle = "#444";
+            ctx.fillRect(800, 450, 60, 300); // 左跑道
+            ctx.fillRect(940, 450, 60, 300); // 右跑道
+
+            // 绘制跑道标识
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 16px monospace";
+            // 北端（顶部）是 18（朝南）
+            ctx.fillText("18L", 810, 445); // 左跑道顶部
+            ctx.fillText("18R", 950, 445); // 右跑道顶部
+            // 南端（底部）是 00（朝北）
+            ctx.fillText("00L", 810, 770); // 左跑道底部
+            ctx.fillText("00R", 950, 770); // 右跑道底部
+          }
+        },
+        'airport-02': {
+          name: 'Secondary Airport',
+          runways: [
+            // 对角线跑道入口 (07/25)
+            { x: 720, y: 720, id: "07", direction: 70, type: "southwest", radius: 50 },
+            { x: 1080, y: 480, id: "25", direction: 250, type: "northeast", radius: 50 }
+          ],
+          drawRunways: function(ctx) {
+            // 绘制对角线跑道 (70°-250°方向)
+            ctx.save();
+            ctx.translate(900, 600); // 雷达中心
+            ctx.rotate((70 * Math.PI) / 180); // 旋转画布到70°
+            
+            // 绘制跑道本体
+            ctx.fillStyle = "#444";
+            ctx.fillRect(-200, -30, 400, 60); // 跑道宽60px，长400px
+            
+            // 恢复画布状态以绘制标签
+            ctx.restore();
+            
+            // 绘制跑道标识
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 16px monospace";
+            // 西南端是 07（朝70°）
+            ctx.fillText("07", 700, 740);
+            // 东北端是 25（朝250°）
+            ctx.fillText("25", 1090, 460);
+          }
+        }
+      },
+    };
+  },
+  computed: {
+    // 根据当前难度获取对应的时间间隔设置
+    currentDifficultySettings() {
+      return this.difficultySettings[this.difficulty];
+    },
+    // 获取当前难度下的最大飞机数量
+    currentMaxAircraftCount() {
+      return this.maxAircraftCount[this.difficulty];
+    },
+    // 计算当前进场和起飞飞机的数量
+    currentApproachCount() {
+      return this.airplanes.filter(p => p.state === "APPROACH" || p.state === "FINAL_APPROACH").length;
+    },
+    currentDepartureCount() {
+      return this.airplanes.filter(p => p.state === "READY_FOR_TAKEOFF" || p.state === "TAKEOFF").length;
+    },
+    // 计算当前屏幕上的总飞机数量
+    currentAircraftCount() {
+      return this.airplanes.length;
+    },
+  },
+  mounted() {
+    const canvas = this.$refs.radarCanvas;
+    this.ctx = canvas.getContext("2d");
+    this.airplaneImage = new Image();
+    this.airplaneImage.src = airplaneImg;
+    this.airplaneImage.onload = () => {
+      this.renderLoop();
+    };
+    
+    // 初始化语音识别
+    this.initSpeechRecognition();
+    
+    // 添加键盘事件监听器
+    this.$el.focus(); // 确保元素可以接收键盘事件
+    
+    // 初始化语音识别
+    this.initSpeechRecognition();
+  },
+  
+  beforeDestroy() {
+    // 移除键盘事件监听器
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+  },
+  
+  methods: {
+    // 根据ID查找飞机
+    getPlaneById(planeId) {
+      return this.airplanes.find(p => p.id === planeId);
+    },
+    
+    startGame() {
+      // 如果游戏当前是暂停状态，则继续游戏而不是重新开始
+      if (this.gameStatus === 'paused') {
+        // 恢复游戏状态
+        this.gameStatus = 'running';
+        this.addToCommunicationLog("Game resumed");
+        
+        // 重新启动生成定时器
+        this.spawnApproachInterval = setInterval(() => {
+          this.checkGamePhase();
+          
+          // 随机决定生成进场还是起飞飞机
+          const spawnType = Math.random() < 0.7 ? 'approach' : 'departure';
+          
+          if (spawnType === 'approach') {
+            this.spawnApproach();
+          } else {
+            this.spawnDeparture();
+          }
+        }, this.currentSpawnInterval);
+        
+        // 重新启动游戏进度更新定时器
+        this.gameProgressInterval = setInterval(() => {
+          this.updateGameProgress();
+        }, 60000); // 每分钟更新一次游戏进度
+        
+        return; // 提前返回，不执行重置游戏的代码
+      }
+      
+      // 以下是原有的重新开始游戏的代码
+      // 重置游戏状态
+      this.score = 0;
+      this.gameStatus = 'running';
+      
+      // 清空通信日志
+      this.communicationLog = ['', '', '', ''];
+      this.allCommunicationLog = ['', '', '', ''];
+      this.nextLogId = 1;
+      
+      // 清空飞机
+      this.airplanes = [];
+      this.selectedPlane = null;
+      this.dragging = false;
+      this.dragLine = null;
+      this.problemAircraft = [];
+      
+      // 设置游戏更新循环
+      this.lastUpdateTime = Date.now();
+      
+      if (!this.gameLoopId) {
+        this.gameLoopId = setInterval(() => {
+          this.updateFlights();
+          this.radarSweep();
+        }, 50);
+      }
+      
+      // 初始化动态难度系统
+      this.gamePhase = 'normal';
+      this.gamePhaseStartTime = Date.now();
+      this.gameStartTime = Date.now();
+      this.gameProgressLevel = 0;
+      
+      // 根据当前机场记录
+      const currentAirportName = this.airports[this.currentAirport].name;
+      this.addToCommunicationLog(`Game started at ${currentAirportName}`);
+      
+      // 设置初始的动态最大飞机数量
+      this.dynamicMaxAircraftCount = this.maxAircraftCount[this.difficulty];
+      
+      // 获取当前难度的基础生成间隔
+      const currentSettings = this.difficultySettings[this.difficulty];
+      this.currentSpawnInterval = currentSettings.baseSpawnInterval;
+      
+      // 清除任何现有的阶段变更定时器
+      if (this.phaseChangeTimeout) {
+        clearTimeout(this.phaseChangeTimeout);
+      }
+      
+      // 初始生成一架飞机
+      this.spawnApproach();
+      
+      // 清除任何现有的生成定时器
+      if (this.spawnApproachInterval) {
+        clearInterval(this.spawnApproachInterval);
+      }
+      
+      // 设置新的飞机生成定时器，使用动态间隔
+      this.spawnApproachInterval = setInterval(() => {
+        this.checkGamePhase(); // 在生成新飞机前检查游戏阶段
+        
+        // 随机决定生成进场还是起飞飞机
+        const spawnType = Math.random() < 0.7 ? 'approach' : 'departure';
+        
+        if (spawnType === 'approach') {
+          this.spawnApproach();
+        } else {
+          this.spawnDeparture();
+        }
+      }, this.currentSpawnInterval);
+      
+      // 初始通信提示
+      this.addToCommunicationLog(`Game started. Difficulty: ${this.getDifficultyText()}`);
+      
+      // 更新游戏进度的定时器
+      this.gameProgressInterval = setInterval(() => {
+        this.updateGameProgress();
+      }, 60000); // 每分钟更新一次游戏进度
+      
+      // 初始化等待起飞队列
+      this.updateTakeoffQueue();
+    },
+    
+    pauseGame() {
+      if (this.gameStatus === 'running') {
+        this.gameStatus = 'paused';
+        // 清除现有间隔
+        clearInterval(this.spawnApproachInterval);
+        if (this.spawnDepartureInterval) {
+          clearInterval(this.spawnDepartureInterval);
+        }
+        
+        // 重置游戏阶段为正常
+        this.gamePhase = 'normal';
+        
+        // 更新动态最大飞机数量
+        this.dynamicMaxAircraftCount = this.maxAircraftCount[this.difficulty] + Math.floor(this.gameProgressLevel / 2);
+        
+        // 使用新难度设置
+        const settings = this.currentDifficultySettings;
+        this.currentSpawnInterval = settings.baseSpawnInterval;
+        
+        // 重新设置生成定时器
+        this.spawnApproachInterval = setInterval(() => {
+          this.checkGamePhase();
+          // 随机决定生成进场还是起飞飞机
+          const spawnType = Math.random() < 0.7 ? 'approach' : 'departure';
+          
+          if (spawnType === 'approach') {
+            this.spawnApproach();
+          } else {
+            this.spawnDeparture();
+          }
+        }, this.currentSpawnInterval);
+        
+        // 添加难度变更信息到通信记录
+        const difficultyText = this.getDifficultyText();
+        this.addToCommunicationLog(`Difficulty changed to: ${difficultyText}`);
+      }
+    },
+    endDrag(event) {
+      if (this.dragging) {
+        event.preventDefault();
+        const canvas = this.$refs.radarCanvas;
+        const rect = canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+        const plane = this.selectedPlane;
+        const originalX = plane.x;
+        const originalY = plane.y;
+
+        if (plane.state === "READY_FOR_TAKEOFF") {
+          // 根据当前机场处理起飞
+          if (this.currentAirport === 'airport-01') {
+            // 机场1：平行跑道处理
+            // 调整跑道位置判断 (中心是900, 600)
+            const onLeftRunway = x >= 800 && x <= 860;
+            const onRightRunway = x >= 940 && x <= 1000;
+            let success = false;
+
+            if (y < 460 && (onLeftRunway || onRightRunway)) {
+              // 北端起飞，朝南 (18L/18R runway - heading 180)
+              plane.heading = 180;
+              plane.targetHeading = 180;
+              plane.state = "TAKEOFF";
+              plane.speed = 0.2 * this.speedLevel;
+              
+              const runwayId = onLeftRunway ? "18L" : "18R";
+              const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
+              this.speak(message);
+              
+              console.log("Taking off southbound from 18L/18R, heading:", plane.heading);
+              success = true;
+            } else if (y > 740 && (onLeftRunway || onRightRunway)) {
+              // 南端起飞，朝北 (00L/00R runway - heading 0)
+              plane.heading = 0;
+              plane.targetHeading = 0;
+              plane.state = "TAKEOFF";
+              plane.speed = 0.2 * this.speedLevel;
+              
+              const runwayId = onLeftRunway ? "00L" : "00R";
+              const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
+              this.speak(message);
+              
+              console.log("Taking off northbound from 00L/00R, heading:", plane.heading);
+              success = true;
+            }
+          } else if (this.currentAirport === 'airport-02') {
+            // 机场2：对角线跑道处理
+            // 将坐标转换为相对于跑道中心点的坐标
+            const centerX = 900;
+            const centerY = 600;
+            const relX = x - centerX;
+            const relY = y - centerY;
+            
+            // 将坐标旋转到跑道坐标系中（跑道方向为70°）
+            const angle = -70 * Math.PI / 180; // 负角度用于反向旋转
+            const rotatedX = relX * Math.cos(angle) - relY * Math.sin(angle);
+            const rotatedY = relX * Math.sin(angle) + relY * Math.cos(angle);
+            
+            // 检查是否在跑道上
+            const isOnRunway = rotatedX >= -200 && rotatedX <= 200 && 
+                               rotatedY >= -30 && rotatedY <= 30;
+            
+            let success = false;
+            
+            if (isOnRunway) {
+              if (rotatedX < -150) {
+                // 西南端起飞，朝东北 (07 runway - heading 70)
+                plane.heading = 70;
+                plane.targetHeading = 70;
+                plane.state = "TAKEOFF";
+                plane.speed = 0.2 * this.speedLevel;
+                
+                const message = `${plane.id}, cleared for takeoff runway 07`;
+                this.speak(message);
+                
+                console.log("Taking off northeast from runway 07, heading:", plane.heading);
+                success = true;
+              } else if (rotatedX > 150) {
+                // 东北端起飞，朝西南 (25 runway - heading 250)
+                plane.heading = 250;
+                plane.targetHeading = 250;
+                plane.state = "TAKEOFF";
+                plane.speed = 0.2 * this.speedLevel;
+                
+                const message = `${plane.id}, cleared for takeoff runway 25`;
+                this.speak(message);
+                
+                console.log("Taking off southwest from runway 25, heading:", plane.heading);
+                success = true;
+              }
+            }
+          }
+          
+          // 如果放置不成功，将飞机返回原始位置
+          if (!success) {
+            plane.x = originalX;
+            plane.y = originalY;
+            this.addToCommunicationLog(`${plane.id}, unable to take position, return to gate`);
+            console.log(`${plane.id} 未成功放置到跑道端口，返回原位`);
+          } else {
+            // 如果成功起飞，从队列中移除
+            delete plane.queuePosition;
+          }
+          
+          // 如果状态改变（READY_FOR_TAKEOFF -> TAKEOFF或仍为READY_FOR_TAKEOFF但位置改变了）
+          // 更新队列
+          if (wasReadyForTakeoff) {
+            this.updateTakeoffQueue();
+          }
+        }
+      }
+    },
+  }
+};
+</script>
+

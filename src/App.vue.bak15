@@ -1,0 +1,3698 @@
+<template>
+  <div id="app" @keydown="onKeyDown" @keyup="onKeyUp" tabindex="0">
+    <div class="controls-container">
+      <!-- 游戏控制按钮 -->
+      <div class="game-controls">
+        <button @click="startGame" :disabled="gameStatus === 'running'">Start</button>
+        <button @click="pauseGame" :disabled="gameStatus !== 'running'">Pause</button>
+        <button @click="endGame" :disabled="gameStatus === 'ended'">End</button>
+        
+        <!-- 添加难度选择下拉菜单 -->
+        <div class="difficulty-select">
+          <span>Difficulty:</span>
+          <select v-model="difficulty" :disabled="gameStatus === 'running'">
+            <option value="beginner">Beginner</option>
+            <option value="intermediate">Intermediate</option>
+            <option value="advanced">Advanced</option>
+            <option value="expert">Expert</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- 速度控制 -->
+      <div class="speed-control">
+        <span>Speed Level:</span>
+        <button v-for="level in [1,2,3]" :key="level" @click="speedLevel = level" :class="{ active: speedLevel === level }">
+          {{ level }}
+        </button>
+      </div>
+    </div>
+
+    <div class="radar-container">
+      <!-- 雷达屏幕 -->
+    <canvas
+      ref="radarCanvas"
+        width="1800"
+        height="1200"
+      @mousedown="startDrag"
+      @mousemove="onDrag"
+      @mouseup="endDrag"
+    ></canvas>
+
+      <!-- 通话记录窗口 - 修改为可滚动，最新消息在顶部 -->
+      <div class="comm-container">
+        <div ref="communicationLog" class="communication-log">
+          <div v-for="(message, index) in allCommunicationLog" :key="index" class="log-entry">
+            {{ message }}
+          </div>
+        </div>
+        
+        <!-- 添加语音通话按钮 -->
+        <div class="voice-command-container">
+          <div v-if="voiceCommandText" class="recognized-text">{{ voiceCommandText }}</div>
+          <button 
+            @mousedown="startVoiceCommand" 
+            @mouseup="stopVoiceCommand"
+            @mouseleave="stopVoiceCommand"
+            :class="{ 'active': isRecording }"
+            class="voice-command-button"
+          >
+            Talk
+      </button>
+          <div v-if="isRecording" class="recording-indicator">Recording...</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style>
+body {
+  margin: 0;
+  background-color: #000;
+  color: #00ffcc;
+  font-family: monospace;
+}
+#app {
+  position: relative;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.controls-container {
+  width: 100%;
+  max-width: 1800px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 10px;
+  padding: 10px 0;
+}
+.radar-container {
+  position: relative;
+  width: 100%;
+  max-width: 1800px;
+}
+canvas {
+  border: 2px solid #00ffcc;
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.command-box {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #001010;
+  color: #00ffcc;
+  padding: 10px 20px;
+  font-size: 18px;
+  border: 1px solid #00ffcc;
+  border-radius: 8px;
+  z-index: 10;
+}
+.speed-control {
+  color: #00ffcc;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+}
+.speed-control button {
+  margin-left: 5px;
+  background: none;
+  border: 1px solid #00ffcc;
+  color: #00ffcc;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+.speed-control button.active {
+  background-color: #00ffcc;
+  color: #000;
+}
+/* 游戏控制按钮样式 */
+.game-controls {
+  z-index: 10;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.game-controls button {
+  background: none;
+  border: 1px solid #00ffcc;
+  color: #00ffcc;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.game-controls button:hover {
+  background-color: rgba(0, 255, 204, 0.2);
+}
+.game-controls button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* 添加难度选择下拉菜单样式 */
+.difficulty-select, .language-select {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: #00ffcc;
+}
+
+.difficulty-select select, .language-select select {
+  background-color: #001010;
+  color: #00ffcc;
+  border: 1px solid #00ffcc;
+  border-radius: 4px;
+  padding: 5px;
+  cursor: pointer;
+}
+
+.difficulty-select select:disabled, .language-select select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.difficulty-select select option, .language-select select option {
+  background-color: #001010;
+  color: #00ffcc;
+}
+
+/* 将语言选择器放在难度选择器右侧 */
+.language-select {
+  margin-left: 15px;
+}
+
+/* 修改通话记录窗口样式，支持滚动，最新消息在顶部 */
+.comm-container {
+  position: relative;
+  width: 100%;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.communication-log {
+  position: relative;
+  width: 100%; /* 恢复原来的窗口大小 */
+  background-color: rgba(0, 16, 16, 0.8);
+  border: 1px solid #00ffcc;
+  border-radius: 8px;
+  padding: 10px;
+  color: #00ffcc;
+  max-height: 120px;
+  overflow-y: auto;
+  z-index: 20;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column; /* 最新消息显示在顶部 */
+  align-items: flex-start; /* 让内容左对齐 */
+}
+
+.log-entry {
+  margin: 5px 0;
+  line-height: 1.5;
+  min-height: 1.5em;
+  width: 100%; /* 确保条目占满整行 */
+  text-align: left; /* 确保文本左对齐 */
+}
+
+/* 添加语音通话按钮样式 */
+.voice-command-container {
+  position: absolute;
+  bottom: 10px;
+  right: 20px;
+  display: flex;
+  align-items: center;
+  z-index: 30;
+}
+
+.voice-command-button {
+  background-color: #003333;
+  border: 2px solid #00ffcc;
+  color: #00ffcc;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: bold;
+  width: 60px;
+  height: 40px;
+  border-radius: 0px; /* Make button square instead of round */
+  cursor: pointer;
+  outline: none;
+  transition: all 0.3s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.voice-command-button:hover {
+  background-color: #004444;
+}
+
+.voice-command-button.active {
+  background-color: #00ffcc;
+  color: #003333;
+  transform: scale(1.1);
+}
+
+.recording-indicator {
+  color: #ff3333;
+  font-weight: bold;
+  animation: blink 1s infinite;
+  position: absolute;
+  top: -20px;
+  right: 0;
+}
+
+.recognized-text {
+  color: #00ffcc;
+  max-width: 300px; /* 增加最大宽度，防止文本显示不完整 */
+  margin-right: 15px;
+  white-space: normal; /* 允许文本换行 */
+  overflow: visible; /* 不裁剪溢出的内容 */
+  text-overflow: initial; /* 不使用省略号 */
+  text-align: left; /* 文本左对齐 */
+  word-wrap: break-word; /* 允许长单词换行 */
+}
+
+@keyframes blink {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* 添加滚动条样式 */
+.communication-log::-webkit-scrollbar {
+  width: 8px;
+}
+.communication-log::-webkit-scrollbar-track {
+  background: rgba(0, 16, 16, 0.5);
+}
+.communication-log::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 204, 0.5);
+  border-radius: 4px;
+}
+.communication-log::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 255, 204, 0.7);
+}
+
+.keyboard-hint {
+  position: absolute;
+  bottom: -20px;
+  right: 0;
+  font-size: 12px;
+  color: #00ffcc;
+  opacity: 0.7;
+}
+</style>
+<script>
+import airplaneImg from './assets/airplane.png';
+
+// Adding constant for English mode
+const isEnglish = true; // English is now the only supported language
+
+let flightCounter = 1000;
+
+// 辅助函数 - 生成介于6901-6999之间的随机航班号
+function generateRandomFlightNumber() {
+  return Math.floor(Math.random() * 99) + 6901; // 6901-6999之间的随机数
+}
+
+export default {
+  data() {
+    return {
+      ctx: null,
+      airplaneImage: null,
+      airplanes: [],
+      selectedPlane: null,
+      dragging: false,
+      dragLine: null,
+      speedLevel: 3,
+      dragFollowing: null,
+      communicationLog: ['', '', '', ''],
+      allCommunicationLog: ['', '', '', ''],
+      gameStatus: 'start',
+      gameLoopId: null,
+      spawnApproachInterval: null,
+      spawnDepartureInterval: null,
+      score: 0,
+      takeoffSpeed: 0.2, // 起飞速度，与进场飞机保持一致
+      navBeacons: [
+        { x: 100, y: 200, id: "NAV1" },
+        { x: 1700, y: 100, id: "NAV2" },
+        { x: 100, y: 1100, id: "NAV3" }
+      ],
+      // 添加难度设置
+      difficulty: 'intermediate', // 默认为中级难度
+      // 不同难度对应的飞机生成时间间隔(毫秒)
+      difficultySettings: {
+        beginner: { approach: 25000, departure: 40000 },      // 初级: 25秒, 40秒
+        intermediate: { approach: 15000, departure: 25000 },  // 中级: 15秒, 25秒
+        advanced: { approach: 10000, departure: 20000 },      // 高级: 10秒, 20秒
+        expert: { approach: 8000, departure: 15000 }          // 专家: 8秒, 15秒
+      },
+      // 添加各难度级别的最大飞机数量限制
+      maxAircraftCount: {
+        beginner: 2,      // 初级最多2架飞机
+        intermediate: 4,   // 中级最多4架飞机
+        advanced: 7,      // 高级最多7架飞机
+        expert: 14        // 专家最多14架飞机
+      },
+      // 初级难度下，记录是否允许生成新飞机（只有当飞机消失后才允许）
+      canSpawnNewAircraft: true,
+      // 记录最后一次飞机生成的时间
+      lastSpawnTime: 0,
+      
+      // 添加语音识别相关数据
+      recognition: null,
+      isRecording: false,
+      voiceCommandText: '',
+      lastVoiceCommandTime: 0,
+      spacePressHandled: false, // 跟踪空格键是否已被处理
+      
+      shiftKeyPressed: false, // 跟踪左Shift键是否按下
+      // 状态管理
+      isLoading: true,
+      nextLogId: 1,
+      voiceRecognitionTimeout: null, // 用于防止重复启动语音识别
+      lastVoiceCommandProcessTime: 0, // 用于命令频率限制
+      continuousMode: false, // Store whether we're in continuous mode
+    };
+  },
+  computed: {
+    // 根据当前难度获取对应的时间间隔设置
+    currentDifficultySettings() {
+      return this.difficultySettings[this.difficulty];
+    },
+    // 获取当前难度下的最大飞机数量
+    currentMaxAircraftCount() {
+      return this.maxAircraftCount[this.difficulty];
+    },
+    // 计算当前进场和起飞飞机的数量
+    currentApproachCount() {
+      return this.airplanes.filter(p => p.state === "APPROACH" || p.state === "FINAL_APPROACH").length;
+    },
+    currentDepartureCount() {
+      return this.airplanes.filter(p => p.state === "READY_FOR_TAKEOFF" || p.state === "TAKEOFF").length;
+    },
+    // 计算当前屏幕上的总飞机数量
+    currentAircraftCount() {
+      return this.airplanes.length;
+    },
+  },
+  mounted() {
+    const canvas = this.$refs.radarCanvas;
+    this.ctx = canvas.getContext("2d");
+    this.airplaneImage = new Image();
+    this.airplaneImage.src = airplaneImg;
+    this.airplaneImage.onload = () => {
+      this.renderLoop();
+    };
+    
+    // 初始化语音识别
+    this.initSpeechRecognition();
+    
+    // 添加键盘事件监听器
+    this.$el.focus(); // 确保元素可以接收键盘事件
+    
+    // 初始化语音识别
+    this.initSpeechRecognition();
+  },
+  
+  beforeDestroy() {
+    // 移除键盘事件监听器
+    window.removeEventListener('keydown', this.handleKeyDown);
+    window.removeEventListener('keyup', this.handleKeyUp);
+  },
+  
+  methods: {
+    // 根据ID查找飞机
+    getPlaneById(planeId) {
+      return this.airplanes.find(p => p.id === planeId);
+    },
+    
+    startGame() {
+      // 重置游戏状态
+      this.score = 0;
+      this.gameStatus = 'running';
+      
+      // 清空通信日志
+      this.communicationLog = ['', '', '', ''];
+      this.allCommunicationLog = ['', '', '', ''];
+      this.nextLogId = 1;
+      
+      // 清空飞机
+      this.airplanes = [];
+      
+      // 设置游戏更新循环
+      this.lastUpdateTime = Date.now();
+      
+      if (!this.gameLoopId) {
+        this.gameLoopId = setInterval(() => {
+          this.updateFlights();
+          this.radarSweep();
+        }, 50);
+      }
+      
+      // 根据难度设置生成飞机的间隔
+      let spawnInterval;
+      
+      switch (this.difficulty) {
+        case 'easy':
+          this.currentMaxAircraftCount = 2;
+          spawnInterval = 10000; // 10秒，更快的生成间隔，更快的生成间隔
+          break;
+        case 'medium':
+          this.currentMaxAircraftCount = 4;
+          spawnInterval = 15000; // 15秒，更快的生成间隔
+          break;
+        case 'hard':
+          this.currentMaxAircraftCount = 6;
+          spawnInterval = 10000; // 10秒，更快的生成间隔
+          break;
+        default:
+          this.currentMaxAircraftCount = 2;
+          spawnInterval = 20000; // 更快的生成间隔
+      }
+      
+      // 初始生成一架飞机
+      this.spawnApproach();
+
+      // 定时生成进场飞机
+      if (!this.spawnApproachInterval) {
+        this.spawnApproachInterval = setInterval(() => {
+          // 随机决定生成进场还是起飞飞机
+          const spawnType = Math.random() < 0.7 ? 'approach' : 'departure';
+          
+          if (spawnType === 'approach') {
+            this.spawnApproach();
+          } else {
+            this.spawnDeparture();
+          }
+        }, spawnInterval);
+      }
+      
+      // 初始通信提示
+      this.addToCommunicationLog(`Game started. Difficulty: ${this.getDifficultyText()}`);
+    },
+    
+    pauseGame() {
+      if (this.gameStatus === 'running') {
+        this.gameStatus = 'paused';
+        this.addToCommunicationLog("Game paused");
+        
+        clearInterval(this.spawnApproachInterval);
+        clearInterval(this.spawnDepartureInterval);
+      }
+    },
+    
+    endGame() {
+      this.gameStatus = 'ended';
+      this.addToCommunicationLog("Game ended");
+      
+      // 停止所有语音播报
+      window.speechSynthesis.cancel();
+      
+      clearInterval(this.spawnApproachInterval);
+      clearInterval(this.spawnDepartureInterval);
+      
+      this.airplanes = [];
+    },
+    
+    restartGame() {
+      this.endGame();
+      
+      this.airplanes = [];
+      this.selectedPlane = null;
+      this.dragging = false;
+      this.dragLine = null;
+      
+      // 重置通信日志，恢复为4个空行
+      this.communicationLog = ['', '', '', ''];
+      this.allCommunicationLog = ['', '', '', '']; // 重置为4个空行
+      
+      // 重置得分和飞机生成状态
+      this.score = 0;
+      this.canSpawnNewAircraft = true;
+      
+      this.gameStatus = 'stopped';
+      this.addToCommunicationLog(this.isEnglish 
+        ? "Game reset, please click \"Start\" button to begin"
+        : "游戏已重置，请点击\"开始\"按钮开始");
+    },
+    
+    renderLoop() {
+      this.drawRadar();
+      
+      if (this.gameStatus === 'running') {
+        this.updateFlights();
+      }
+      
+      requestAnimationFrame(this.renderLoop);
+    },
+    
+    numberToWords(num) {
+      // 航空术语中的特殊数字发音
+      const map = ["zero", "one", "two", "tree", "four", "five", "six", "seven", "eight", "niner"];
+      return num.toString().split("").map(n => map[+n]).join(" ");
+    },
+    
+    // 将航向数值转换为航空术语
+    formatHeadingForVoice(heading) {
+      // 确保航向是3位数
+      const headingStr = heading.toString().padStart(3, "0");
+      return this.numberToWords(headingStr);
+    },
+    
+    // 将普通数字转换为中文陆空通话数字读法
+    convertToChineseAviationNumber(number) {
+      const aviationDigits = {
+        '0': '洞',
+        '1': '幺',
+        '2': '两',
+        '3': '三',
+        '4': '四',
+        '5': '五',
+        '6': '六',
+        '7': '拐',
+        '8': '八',
+        '9': '九'
+      };
+      
+      // 将数字转为字符串并处理每一位
+      return String(number).split('').map(digit => aviationDigits[digit] || digit).join('');
+    },
+    
+    // 语音合成 - 支持多语言
+    speak(text, addToLog = true) {
+      // 如果没有文本，不进行处理
+      if (!text) return;
+      
+      // Cancel any ongoing speech before starting a new one
+      window.speechSynthesis.cancel();
+      
+      // 删除不必要的扰人信息，例如标点符号、多余空格等
+      let voiceCommand = text
+        .replace(/\([^)]*\)/g, '') // 删除括号内内容 (例如 "to NAV1 (bravo 280)")
+        .replace(/[.,?!;:]/g, '') // 删除标点符号
+        .replace(/\s+/g, ' ') // 多个空格替换为单个空格
+        .trim(); // 清理首尾空格
+      
+      // 1. 处理航班号 - 使用航空通话标准格式 (B6978 => "Bravo six nine seven eight")
+      voiceCommand = voiceCommand.replace(/\b(B)(\d{4})\b/g, (match, letter, numbers) => {
+        // 转换B为Bravo
+        const prefix = "Bravo";
+        // 单独读出各个数字
+        const digits = this.numberToWords(numbers);
+        return `${prefix} ${digits}`;
+      });
+      
+      // 2. 处理航向值 (例如: "heading 270" => "heading two seven zero")
+      voiceCommand = voiceCommand.replace(/(heading|head)\s+(\d+)/gi, (match, p1, p2) => {
+        const headingWords = this.numberToWords(p2);
+        return `${p1} ${headingWords}`;
+      });
+      
+      // 3. 处理跑道号
+      if (voiceCommand.includes('runway')) {
+        // 提取跑道号
+        const runwayMatch = voiceCommand.match(/runway\s+(\w+)/);
+        if (runwayMatch && runwayMatch[1]) {
+          const runway = runwayMatch[1];
+          let runwayWords = "";
+          
+          // 处理跑道号的特殊情况 (00L, 00R, 18L, 18R等)
+          for (let i = 0; i < runway.length; i++) {
+            const char = runway[i];
+            if (char >= '0' && char <= '9') {
+              runwayWords += this.numberToWords(char) + " ";
+            } else if (char === 'L') {
+              runwayWords += "left ";
+            } else if (char === 'R') {
+              runwayWords += "right ";
+            } else {
+              runwayWords += char + " ";
+            }
+          }
+          
+          // 替换跑道号为正确的读法
+          voiceCommand = voiceCommand.replace(/runway\s+\w+/, `runway ${runwayWords.trim()}`);
+        }
+      }
+      
+      console.log(`Speech: ${voiceCommand}`);
+      const utterance = new SpeechSynthesisUtterance(voiceCommand);
+      utterance.lang = "en-US";
+      utterance.pitch = 1;
+      utterance.rate = 1;
+      speechSynthesis.speak(utterance);
+      
+      if (addToLog) {
+        this.addToCommunicationLog(text);
+      }
+    },
+    
+    addToCommunicationLog(message) {
+      // Create log entry
+      const logEntry = message;
+      
+      // Add to main communication log
+      this.communicationLog.unshift(logEntry);
+      
+      // Also update the allCommunicationLog for display
+      this.allCommunicationLog = [...this.communicationLog];
+      
+      // Limit log entries to prevent overflow
+      if (this.communicationLog.length > 20) {
+        this.communicationLog = this.communicationLog.slice(0, 20);
+        this.allCommunicationLog = [...this.communicationLog];
+      }
+    },
+    
+    spawnApproach() {
+      if (this.gameStatus !== 'running') return;
+      
+      // 检查是否已达到当前难度的最大飞机数量限制
+      if (this.currentAircraftCount >= this.currentMaxAircraftCount) {
+        console.log(`已达到${this.difficulty}难度下的最大飞机数量限制: ${this.currentMaxAircraftCount}`);
+        return;
+      }
+      
+      // 使用B航空+6901-6999之间的随机数字
+      const flightNumber = generateRandomFlightNumber();
+      const id = "B" + flightNumber;
+      
+      // 修改进近飞机的生成位置，确保其可见性
+      // 使用更靠近雷达屏幕中央的位置
+      const entryPoints = [
+        { x: 200, y: 200 },          // 左上，更靠近中心点
+        { x: 900, y: 200 },          // 上方中部，更靠近中心点
+        { x: 1600, y: 200 },         // 右上，更靠近中心点
+        { x: 200, y: 600 },          // 左侧中部，更靠近中心点
+        { x: 1600, y: 600 },         // 右侧中部，更靠近中心点
+        { x: 200, y: 1000 },         // 左下，更靠近中心点
+        { x: 900, y: 1000 },         // 下方中部，更靠近中心点
+        { x: 1600, y: 1000 }         // 右下，更靠近中心点
+      ];
+      
+      const entry = entryPoints[Math.floor(Math.random() * entryPoints.length)];
+      const plane = {
+        id,
+        x: entry.x,
+        y: entry.y,
+        heading: 0,
+        targetHeading: 0,
+        speed: 0.2 * this.speedLevel,
+        state: "APPROACH",
+        selected: false
+      };
+      
+      const dx = 900 - entry.x;
+      const dy = 600 - entry.y;
+      
+      // 使用与飞机移动和拖拽计算相同的航向算法
+      const angle = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+      
+      plane.heading = plane.targetHeading = angle;
+      
+      this.airplanes.push(plane);
+      this.addToCommunicationLog(`${id} approaching`);
+      
+      // 记录生成时间
+      this.lastSpawnTime = Date.now();
+    },
+    
+    spawnDeparture() {
+      if (this.gameStatus !== 'running') return;
+      
+      // 检查是否已达到当前难度的最大飞机数量限制
+      if (this.currentAircraftCount >= this.currentMaxAircraftCount) {
+        console.log(`已达到${this.difficulty}难度下的最大飞机数量限制: ${this.currentMaxAircraftCount}`);
+        return;
+      }
+      
+      // 使用B航空+6901-6999之间的随机数字
+      const flightNumber = generateRandomFlightNumber();
+      const id = "B" + flightNumber;
+      
+      const plane = {
+        id,
+        x: 900, // 两条跑道之间的位置
+        y: 600, // 跑道中间位置
+        heading: 0,
+        targetHeading: 0,
+        speed: 0,
+        state: "READY_FOR_TAKEOFF",
+        selected: false
+      };
+      
+      this.airplanes.push(plane);
+      this.addToCommunicationLog(`${id} ready for takeoff`);
+      
+      // 记录生成时间
+      this.lastSpawnTime = Date.now();
+    },
+    
+    updateFlights() {
+      try {
+        // 游戏暂停时不更新
+        if (this.gameStatus !== 'running') return;
+        
+        // 添加性能监控
+        const startTime = performance.now();
+        
+        const now = Date.now();
+        const dt = Math.min((now - this.lastUpdateTime) / 1000, 0.1); // 限制最大时间步长
+        this.lastUpdateTime = now;
+        
+        // 待移除的飞机
+      const toRemove = [];
+        
+        // 遍历所有飞机，更新状态
+      for (const plane of this.airplanes) {
+          try {
+            // 处理进场过程中的飞机 - 优先使用特殊的更新函数
+            // 检查是否有新命令标记，新命令优先，取消进场
+            if (plane.newCommandIssued) {
+              console.log(`${plane.id} 收到新命令，取消进场过程`);
+              plane.state = "FLYING"; // 从APPROACH改为FLYING，确保彻底脱离进场状态
+              plane.speed = 0.4 * this.speedLevel; // 增加速度以便快速脱离跑道
+              plane._lastHeadingTime = 0; // 重置航向变化计时器
+              plane._headingStep = 0; // 重置航向变化步长
+              plane.approachPath = null;
+              plane.approachPathCreated = false;
+              plane.landingRunway = null;
+              plane.newCommandIssued = false; // 重置标记
+              
+              // 清除目标跑道坐标 - 确保不会继续原来的着陆
+              plane.targetRunwayX = undefined;
+              plane.targetRunwayY = undefined;
+              
+              console.debug(`已清除${plane.id}的进场路径，当前飞机状态: ${plane.state}，位置: (${Math.round(plane.x)},${Math.round(plane.y)})`);
+            }
+
+            // 只有没有新命令时才继续进场过程
+            if (plane.state === "FINAL_APPROACH" && plane.approachPath) {
+              // 添加异常保护，防止出现无限循环或性能问题
+              try {
+                const updated = this.updateApproachFlight(plane);
+                if (updated) {
+                  // 如果进场飞机已更新，跳过普通的更新流程
+                  continue;
+          } else {
+                  // 如果更新失败，将飞机状态重置为正常飞行
+                  console.log(`${plane.id} 进场更新失败，重置为正常飞行状态`);
+                  plane.state = "APPROACH";
+                  plane.approachPath = null;
+                  plane.approachPathCreated = false;
+                }
+              } catch (approachError) {
+                console.error(`${plane.id} 进场更新发生错误:`, approachError);
+                // 出现错误时重置飞机状态
+                plane.state = "APPROACH";
+                plane.approachPath = null;
+                plane.approachPathCreated = false;
+              }
+            }
+            
+            // 检查性能 - 如果单帧执行时间过长，则分割任务
+            const currentTime = performance.now();
+            if (currentTime - startTime > 16) { // 16ms约等于60fps
+              console.log(`updateFlights执行时间过长(${Math.round(currentTime - startTime)}ms)，延迟处理剩余飞机`);
+              // 在下一帧继续处理剩余飞机
+              setTimeout(() => this.updateFlights(), 0);
+              break;
+            }
+            
+            // 处理简化版的落地指令 - 直接飞向目标跑道
+            if (plane.targetRunwayX !== undefined && plane.targetRunwayY !== undefined) {
+              // 计算到跑道的距离
+              const dx = plane.targetRunwayX - plane.x;
+              const dy = plane.targetRunwayY - plane.y;
+              const distToRunway = Math.sqrt(dx*dx + dy*dy);
+              
+              // 计算飞向跑道的航向
+              let heading = Math.atan2(dx, -dy) * 180 / Math.PI;
+              if (heading < 0) heading += 360;
+              
+              // 设置飞机航向朝向跑道
+              plane.targetHeading = Math.round(heading);
+              
+              // 如果已经接近跑道入口，进入着陆阶段
+              if (distToRunway < 20) {
+                // 进入着陆阶段
+          plane.state = "LANDING";
+                plane.x = plane.targetRunwayX;
+                plane.y = plane.targetRunwayY;
+                plane.runway = plane.landingRunway;
+                plane.landingStartTime = Date.now();
+                plane.originalSpeed = plane.speed; // 保存原始速度，用于降落过程中的减速计算
+                plane.landingDirection = plane.landingRunway.startsWith("18") ? 180 : 0; // 设置着陆方向
+                
+                // 发出着陆确认
+                const message = `${plane.id}, landing runway ${plane.landingRunway}`;
+                this.addToCommunicationLog(message);
+                
+                console.log(`${plane.id} 到达跑道入口，开始着陆`);
+                
+                // 清除目标跑道数据，防止重复处理
+                plane.targetRunwayX = undefined;
+                plane.targetRunwayY = undefined;
+                continue;
+              }
+            }
+            
+            // 更新飞机位置和航向
+            // 只有飞行中和起飞中的飞机才会移动
+            const movingStates = ["APPROACH", "FLYING", "TAKEOFF", "FINAL_APPROACH"];
+            
+            if (movingStates.includes(plane.state)) {
+              // 常规航向更新
+              this.updateAircraftHeading(plane);
+              
+              // 计算移动分量
+              const headingRad = (plane.heading * Math.PI) / 180;
+              const dx = Math.sin(headingRad) * plane.speed;
+              const dy = -Math.cos(headingRad) * plane.speed;
+              
+              // 更新位置
+              plane.x += dx;
+              plane.y += dy;
+            }
+            
+            // 处理着陆中的飞机
+        if (plane.state === "LANDING") {
+              // 检查是否有新命令
+              if (plane.newCommandIssued) {
+                console.log(`${plane.id} 在降落过程中收到新命令，中止降落`);
+                plane.state = "FLYING";
+                plane.speed = 0.4 * this.speedLevel;
+                plane.landingRunway = null;
+                plane.runway = null;
+                plane.newCommandIssued = false;
+                continue; // 跳过本次更新，由下一帧处理新指令
+              }
+              
+              // 设置正确的着陆方向
+              const heading = plane.landingDirection || (plane.landingRunway?.startsWith("18") ? 180 : 0);
+              plane.landingDirection = heading; // 确保设置了着陆方向
+              const rad = (heading * Math.PI) / 180;
+              
+              // 如果没有设置原始速度，设置一个默认值
+              if (plane.originalSpeed === undefined) {
+                plane.originalSpeed = 0.5 * this.speedLevel;
+              }
+              
+              // 修正：确保航向角度与飞行方向一致 (0度是北)
+              const dx = Math.sin(rad) * plane.speed;
+              const dy = -Math.cos(rad) * plane.speed;  // 注意负号！确保0度是向上
+              
+              plane.x += dx;
+              plane.y += dy;  // y增加表示向下移动
+              
+              // 改进的减速逻辑 - 计算在跑道上行进的距离比例
+              const runwayLength = 300; // 跑道长度
+              let runwayProgress = 0;
+              
+              // 根据跑道方向确定进度计算方式
+              if (plane.landingDirection === 0) { // 朝北着陆
+                // 在南端进入，计算已经向北移动了多少
+                const entryY = 750; // 跑道南端
+                runwayProgress = Math.max(0, Math.min(1, (entryY - plane.y) / runwayLength));
+              } else { // 朝南着陆
+                // 在北端进入，计算已经向南移动了多少
+                const entryY = 450; // 跑道北端
+                runwayProgress = Math.max(0, Math.min(1, (plane.y - entryY) / runwayLength));
+              }
+              
+              console.log(`${plane.id} landing progress: ${Math.round(runwayProgress * 100)}%, runway: ${plane.runway}, direction: ${plane.landingDirection}`);
+              
+              // 平滑减速曲线 - 起初缓慢减速，然后快速减速，最后缓慢滑行
+              // 使用二次方程使减速更加自然
+              const speedFactor = 1 - (runwayProgress * runwayProgress);
+              plane.speed = plane.originalSpeed * speedFactor;
+              
+              // 当飞机滑行到跑道的三分之二处时
+              if (runwayProgress >= 2/3) {
+                const logMessage = `${plane.id} has vacated runway ${plane.runway}`;
+                this.addToCommunicationLog(logMessage);
+                console.log(logMessage);
+                
+                // 增加得分 - 落地成功得2分
+                this.score += 2;
+                console.log(`${plane.id} 落地完成，得2分，当前总分: ${this.score}`);
+                
+                // 确保飞机被移除
+            toRemove.push(plane);
+                
+                // 允许立即生成新飞机
+                this.canSpawnNewAircraft = true;
+                
+                // 强制更新当前飞机数量的显示
+                this.$forceUpdate();
+              }
+        }
+
+            // 处理起飞的飞机
+        if (plane.state === "TAKEOFF") {
+              // 维持恒定速度，不要逐渐加速
+              plane.speed = 0.2 * this.speedLevel; // 使用与进场飞机相同的速度
+
+              // 检查飞机是否接近任何导航台
+              for (const beacon of this.navBeacons) {
+                const distToBeacon = Math.sqrt(
+                  Math.pow(plane.x - beacon.x, 2) + 
+                  Math.pow(plane.y - beacon.y, 2)
+                );
+                
+                // 如果飞机在导航台附近(40像素范围内)
+                if (distToBeacon < 40) {
+                  // 增加得分 - 起飞成功得1分
+                  this.score += 1;
+                  console.log(`${plane.id} 到达导航台${beacon.id}，得1分，当前总分: ${this.score}`);
+                  
+                  this.speak(`${plane.id} has reached ${beacon.id}, exiting radar coverage`, true);
+                  this.addToCommunicationLog(`${plane.id} has reached navigation beacon ${beacon.id}`);
+                  toRemove.push(plane); // 飞机到达导航台后直接消失
+                  
+                  // 允许立即生成新飞机，不仅限于初级难度
+                  this.canSpawnNewAircraft = true;
+                  break; // 找到一个导航台后不再继续检查
+                }
+              }
+              
+              // 检查飞机是否已离开雷达范围
+              if (plane.x < -100 || plane.x > 1900 || plane.y < -100 || plane.y > 1300) {
+                this.addToCommunicationLog(`${plane.id} has exited radar coverage`);
+            toRemove.push(plane);
+                
+                // 允许立即生成新飞机，不仅限于初级难度
+                this.canSpawnNewAircraft = true;
+          }
+        }
+          } catch (planeError) {
+            // 单个飞机更新出错，记录但继续处理其他飞机
+            console.error(`更新飞机 ${plane.id} 时出错:`, planeError);
+      }
+      }
+      // 移除待删除的飞机
+      this.airplanes = this.airplanes.filter(p => !toRemove.includes(p));
+      
+      // 如果有飞机被移除，允许生成新飞机
+      if (toRemove.length > 0) {
+        console.log('飞机已消失，允许生成新飞机');
+        // 触发生成新飞机的检查
+        setTimeout(() => this.checkAndSpawnNewAircraft(), 1000);
+      }
+      
+      // 记录处理时间，用于性能调优
+      const endTime = performance.now();
+      const processingTime = endTime - startTime;
+      if (processingTime > 25) {
+        console.warn(`updateFlights处理耗时: ${processingTime.toFixed(2)}ms，可能影响游戏性能`);
+      }
+    } catch (error) {
+      // 捕获整个更新循环中的任何错误
+      console.error("更新飞机时发生严重错误:", error);
+    }
+    },
+
+    // 新增方法 - 统一的航向更新逻辑
+    updateAircraftHeading(plane) {
+      // 使用整数值计算，确保精确性
+      const currentHeading = Math.round(plane.heading) % 360;
+      const targetHeading = Math.round(plane.targetHeading) % 360;
+      
+      // 如果目标航向和当前航向完全相同，不需要转向
+      if (currentHeading === targetHeading) {
+        plane.heading = targetHeading; // 确保精确匹配
+        return;
+      }
+      
+      // 计算角度差，确定转向方向
+      const clockwiseDiff = (targetHeading - currentHeading + 360) % 360;
+      const counterClockwiseDiff = (currentHeading - targetHeading + 360) % 360;
+      
+      // 转向速率 - 所有地方使用相同的值
+      const turnRate = 0.5;
+      
+      // 确定转向方向
+      let shouldTurnClockwise;
+      
+      // 如果有保存的转向方向（从指令中来），直接使用它
+      if (plane.forcedTurnDirection) {
+        shouldTurnClockwise = plane.forcedTurnDirection === 'right';
+      } 
+      // 如果是接近180度的转弯，使用之前预先确定的方向
+      else if (Math.abs(clockwiseDiff - counterClockwiseDiff) < 5 && 
+              (clockwiseDiff > 175 || counterClockwiseDiff > 175)) {
+        // 如果没有预先确定的方向，默认使用顺时针(右转)
+        shouldTurnClockwise = plane.preferredTurnDirection === 'left' ? false : true;
+      } 
+      // 标准情况 - 选择角度较小的路径
+      else {
+        shouldTurnClockwise = clockwiseDiff <= counterClockwiseDiff;
+      }
+      
+      // 执行转向
+      if (shouldTurnClockwise) {
+        // 顺时针转向（右转）- 增加航向值
+        if (clockwiseDiff <= turnRate) {
+          // 已经很接近目标，直接设置为目标值
+          plane.heading = targetHeading;
+        } else {
+          // 继续顺时针转向
+          plane.heading = (plane.heading + turnRate) % 360;
+        }
+      } else {
+        // 逆时针转向（左转）- 减少航向值
+        if (counterClockwiseDiff <= turnRate) {
+          // 已经很接近目标，直接设置为目标值
+          plane.heading = targetHeading;
+        } else {
+          // 继续逆时针转向
+          plane.heading = (plane.heading - turnRate + 360) % 360;
+        }
+      }
+    },
+    drawRadar() {
+      const ctx = this.ctx;
+      ctx.clearRect(0, 0, 1800, 1200);
+      ctx.fillStyle = "#0a1a1a";
+      ctx.fillRect(0, 0, 1800, 1200);
+
+      // 调整跑道位置到新的中心点 (900, 600)
+      ctx.fillStyle = "#444";
+      ctx.fillRect(800, 450, 60, 300); // 左跑道
+      ctx.fillRect(940, 450, 60, 300); // 右跑道
+
+      // 调整跑道标识位置
+      ctx.fillStyle = "#fff";
+      ctx.font = "bold 16px monospace";
+      // 北端（顶部）是 18（朝南）
+      ctx.fillText("18L", 810, 445); // 左跑道顶部
+      ctx.fillText("18R", 950, 445); // 右跑道顶部
+      // 南端（底部）是 00（朝北）
+      ctx.fillText("00L", 810, 770); // 左跑道底部
+      ctx.fillText("00R", 950, 770); // 右跑道底部
+
+      // 绘制雷达环
+      ctx.strokeStyle = "#004433";
+      for (let r = 200; r <= 1000; r += 200) {
+        ctx.beginPath();
+        ctx.arc(900, 600, r, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+
+      // 绘制方向线
+      ctx.beginPath();
+      ctx.moveTo(900, 0);
+      ctx.lineTo(900, 1200);
+      ctx.moveTo(0, 600);
+      ctx.lineTo(1800, 600);
+      ctx.stroke();
+
+      // 绘制导航台
+      this.drawNavBeacons(ctx);
+
+      // 显示游戏状态、难度和分数
+      ctx.fillStyle = "#00ffcc";
+      ctx.font = "bold 18px monospace";
+      ctx.fillText(`Status: ${this.getGameStatusText()}`, 20, 30);
+      ctx.fillText(`Difficulty: ${this.getDifficultyText()}`, 20, 60);
+      ctx.fillText(`Score: ${this.score}`, 20, 90); // 移动得分显示到第三行
+      
+      // 新增：显示当前飞机数量信息
+      if (this.gameStatus === 'running') {
+        ctx.fillText(`Aircraft: ${this.currentAircraftCount}/${this.currentMaxAircraftCount}`, 20, 120);
+      }
+
+      // 绘制飞机
+      for (const plane of this.airplanes) {
+        ctx.save();
+        ctx.translate(plane.x, plane.y);
+        
+        const heading = plane.heading;
+        // 修正飞机旋转角度，确保和航向一致
+        // Canvas中0度是向右的，要转换为0度朝上，需要减去90度
+        const rotationAngle = ((heading - 90) + 360) % 360;
+        
+        ctx.rotate((rotationAngle * Math.PI) / 180);
+        ctx.drawImage(this.airplaneImage, -20, -20, 40, 40);
+        ctx.restore();
+
+        ctx.fillStyle = plane.selected ? "#00ffcc" : "#ffffff";
+        ctx.font = "14px monospace";
+        ctx.fillText(`${plane.id} [${plane.state}]`, plane.x + 25, plane.y);
+        
+        // 显示航向信息 - 总是显示当前航向和目标航向（如果不同）
+        ctx.fillStyle = "#00ffcc";
+        ctx.font = "12px monospace";
+        
+        const currentHdg = Math.round(plane.heading) % 360;
+        const targetHdg = Math.round(plane.targetHeading) % 360;
+        
+        if (plane.selected) {
+          if (currentHdg !== targetHdg) {
+            ctx.fillText(`HDG: ${currentHdg}° → ${targetHdg}°`, plane.x + 25, plane.y + 20);
+          } else {
+            ctx.fillText(`HDG: ${currentHdg}°`, plane.x + 25, plane.y + 20);
+          }
+        }
+      }
+
+      // 绘制拖拽线和转弯轨迹
+      if (this.dragLine) {
+        const startX = this.dragLine.x1;
+        const startY = this.dragLine.y1;
+        const endX = this.dragLine.x2;
+        const endY = this.dragLine.y2;
+        
+        // 如果正在拖拽中，绘制黄色箭头
+        if (this.dragLine.dragging) {
+          // 拖拽中 - 绘制黄色直线和箭头（管制指令）
+          ctx.strokeStyle = "#ffff00"; // 黄色表示指令
+          ctx.lineWidth = 3; // 增加线宽使其更明显
+          ctx.setLineDash([]);
+          
+          // 绘制直线
+          ctx.beginPath();
+          ctx.moveTo(startX, startY);
+          ctx.lineTo(endX, endY);
+          ctx.stroke();
+          
+          // 绘制箭头
+          const headlen = 15; // 箭头长度
+          const angle = Math.atan2(endY - startY, endX - startX);
+          
+          ctx.beginPath();
+          ctx.moveTo(endX, endY);
+          ctx.lineTo(
+            endX - headlen * Math.cos(angle - Math.PI / 6),
+            endY - headlen * Math.sin(angle - Math.PI / 6)
+          );
+          ctx.lineTo(
+            endX - headlen * Math.cos(angle + Math.PI / 6),
+            endY - headlen * Math.sin(angle + Math.PI / 6)
+          );
+          ctx.closePath();
+          ctx.fillStyle = "#ffff00";
+          ctx.fill();
+          
+          // 特殊处理：如果拖到了跑道入口，显示进场信息
+          if (this.dragLine.isNearRunwayEntrance) {
+            const runwayInfo = this.dragLine.runwayInfo;
+            ctx.fillStyle = "#ffff00";
+            ctx.font = "bold 14px monospace";
+            ctx.textAlign = "center";
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2 - 20;
+            ctx.fillText(`→ APPR RWY ${runwayInfo.id}`, midX, midY);
+            ctx.textAlign = "start";
+          } 
+          // 否则显示正常的航向信息
+          else if (!this.dragLine.isDirectFlight) {
+            // 与onDrag方法使用相同的航向计算逻辑
+            const dx = endX - startX;
+            const dy = endY - startY;
+            const lineAngle = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+            
+            ctx.fillStyle = "#ffff00";
+            ctx.font = "bold 14px monospace";
+            ctx.textAlign = "center";
+            const midX = (startX + endX) / 2;
+            const midY = (startY + endY) / 2 - 20;
+            ctx.fillText(`→ HDG ${lineAngle}°`, midX, midY);
+            ctx.textAlign = "start";
+          }
+        } else if (this.dragLine.landingApproach) {
+          // 绘制进场轨迹
+        ctx.strokeStyle = "#00ffcc";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 5]);
+          
+          // 开始从当前位置到跑道入口
+          const entranceX = this.dragLine.runwayEntrance.x;
+          const entranceY = this.dragLine.runwayEntrance.y;
+          const finalHeading = this.dragLine.finalHeading;
+          
+          // 获取当前航向
+          const currentHeading = Math.round(this.dragLine.startHeading) % 360;
+          
+          // 计算需要进行的转弯
+          const clockwiseDiff = (finalHeading - currentHeading + 360) % 360;
+          const counterClockwiseDiff = (currentHeading - finalHeading + 360) % 360;
+          const shouldTurnClockwise = clockwiseDiff <= counterClockwiseDiff;
+          const turnDir = shouldTurnClockwise ? "right" : "left";
+          
+          // 绘制从当前位置到跑道入口的弧线轨迹
+          this.drawApproachPath(ctx, startX, startY, entranceX, entranceY, currentHeading, finalHeading, shouldTurnClockwise);
+          
+          // 显示进场信息
+          ctx.setLineDash([]);
+          ctx.fillStyle = "#00ffcc";
+          ctx.font = "12px monospace";
+          ctx.textAlign = "center";
+          
+          // 在入口位置显示跑道信息
+          ctx.fillText(
+            `APPR RWY ${this.dragLine.runwayInfo.id}`, 
+            entranceX, 
+            entranceY - 25
+          );
+          
+          // 在中途显示转弯方向
+          const midX = (startX + entranceX) / 2;
+          const midY = (startY + entranceY) / 2;
+          ctx.fillText(
+            `${turnDir} to ${finalHeading}°`, 
+            midX, 
+            midY - 15
+          );
+          
+          ctx.textAlign = "start";
+        } else {
+          // 拖拽结束后 - 绘制蓝色虚线轨迹（预计飞行路径）
+          ctx.strokeStyle = "#00ffcc";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 5]);
+          
+          // 获取航向角度（0-360度，0度为北方）
+          const startHeading = Math.round(this.dragLine.startHeading) % 360;
+          const targetHeading = Math.round(this.dragLine.targetHeading) % 360;
+          
+          // 检查是否为直线飞行
+          if (this.dragLine.isDirectFlight) {
+            // 直线飞行 - 简单绘制一条直线
+        ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            
+            // 根据目标航向计算终点 - 修正用航空角度(0为北)来计算
+            const rad = (targetHeading * Math.PI) / 180;
+            const lineLength = 400; // 直线长度
+            // 正确计算：0度是北方，所以需要用sine计算x方向，negative cosine计算y方向
+            const endX = startX + Math.sin(rad) * lineLength;
+            const endY = startY - Math.cos(rad) * lineLength;
+            
+            ctx.lineTo(endX, endY);
+        ctx.stroke();
+            
+            // 在终点显示航向文本
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#00ffcc";
+            ctx.font = "12px monospace";
+            ctx.textAlign = "center";
+            
+            ctx.fillText(
+              `HDG ${targetHeading}°`, 
+              endX, 
+              endY - 20
+            );
+            
+            ctx.textAlign = "start";
+          } else {
+            // 转弯飞行 - 使用与updateAircraftHeading完全相同的逻辑
+            
+            // 获取角度差
+            const clockwiseDiff = this.dragLine.clockwiseDiff;
+            const counterClockwiseDiff = this.dragLine.counterClockwiseDiff;
+            
+            // 使用与指令和飞行逻辑相同的转向方向确定方式
+            let isTurnClockwise;
+            
+            if (this.dragLine.turnDirection === 'right') {
+              isTurnClockwise = true; 
+            } else if (this.dragLine.turnDirection === 'left') {
+              isTurnClockwise = false;
+            } else {
+              // 如果没有指定，使用角度差确定
+              isTurnClockwise = clockwiseDiff <= counterClockwiseDiff;
+            }
+            
+            // 开始绘制路径
+            ctx.beginPath();
+            ctx.moveTo(startX, startY);
+            
+            // 使用与updateAircraftHeading完全相同的逻辑模拟飞行
+            let currentHeading = startHeading;
+            let currentX = startX;
+            let currentY = startY;
+            
+            // 路径分段
+            const steps = 200;  // 足够多的步数确保平滑显示
+            const turnRate = 0.5; // 与updateAircraftHeading相同的转向率
+            
+            for (let i = 0; i < steps; i++) {
+              // 使用与updateAircraftHeading相同的航向更新逻辑
+              if (currentHeading !== targetHeading) {
+                if (isTurnClockwise) {
+                  // 顺时针转向（右转）
+                  const currentClockwiseDiff = (targetHeading - currentHeading + 360) % 360;
+                  if (currentClockwiseDiff <= turnRate) {
+                    currentHeading = targetHeading;
+                  } else {
+                    currentHeading = (currentHeading + turnRate) % 360;
+                  }
+                } else {
+                  // 逆时针转向（左转）
+                  const currentCounterClockwiseDiff = (currentHeading - targetHeading + 360) % 360;
+                  if (currentCounterClockwiseDiff <= turnRate) {
+                    currentHeading = targetHeading;
+                  } else {
+                    currentHeading = (currentHeading - turnRate + 360) % 360;
+                  }
+                }
+              }
+              
+              // 根据当前航向移动 - 确保航向角度与飞行方向一致 (0度是北)
+              const rad = (currentHeading * Math.PI) / 180;
+              const dx = Math.sin(rad) * 2;  // 放大移动距离以可视化轨迹
+              const dy = -Math.cos(rad) * 2;  // 注意负号！0度是上方，所以cos为负
+              
+              currentX += dx;
+              currentY += dy;
+              
+              // 绘制轨迹点
+              ctx.lineTo(currentX, currentY);
+              
+              // 如果已到达目标航向，再继续直线飞行一段距离后停止
+              if (currentHeading === targetHeading) {
+                // 如果已经达到目标航向，再飞行100步就停止
+                if (i > 100) break;
+              }
+            }
+            
+            // 完成路径绘制
+            ctx.stroke();
+            
+            // 在轨迹终点显示目标航向文本
+            ctx.setLineDash([]);
+            ctx.fillStyle = "#00ffcc";
+            ctx.font = "12px monospace";
+            ctx.textAlign = "center";
+            
+            // 显示转弯方向和目标航向
+            const dirText = isTurnClockwise ? 'right' : 'left';
+            ctx.fillText(
+              `${dirText} HDG ${targetHeading}°`, 
+              currentX, 
+              currentY - 20
+            );
+            
+            ctx.textAlign = "start";
+          }
+        }
+        
+        // 重置绘图状态
+        ctx.lineWidth = 1;
+        ctx.setLineDash([]);
+      }
+    },
+    getClickedPlane(x, y) {
+      // 考虑到飞机图标的大小，使用更合适的点击区域
+      const clickRadius = 30; // 点击判定半径
+      
+      return this.airplanes.find(plane => {
+        const distance = Math.sqrt(
+          Math.pow(plane.x - x, 2) + 
+          Math.pow(plane.y - y, 2)
+        );
+        return distance < clickRadius;
+      });
+    },
+    startDrag(event) {
+      if (this.gameStatus !== 'running') return;
+      
+      const canvas = this.$refs.radarCanvas;
+      const rect = canvas.getBoundingClientRect();
+      
+      // 计算鼠标点击的实际坐标，考虑到画布可能被缩放
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      
+      const x = (event.clientX - rect.left) * scaleX;
+      const y = (event.clientY - rect.top) * scaleY;
+      
+      // 查找被点击的飞机
+      const clicked = this.findClickedPlane(x, y);
+      
+      if (clicked) {
+        // 问题2修复：检查起飞飞机是否已离开跑道
+        if (clicked.state === "TAKEOFF" && !this.isAircraftOffRunway(clicked)) {
+          // 飞机还在跑道上，显示警告但不允许拖拽
+          this.addToCommunicationLog(`${clicked.id}, must exit runway before accepting heading commands`);
+          // 移除语音通话，仅在日志中显示
+          return;
+        }
+        
+        this.selectedPlane = clicked;
+        clicked.selected = true;
+        this.dragging = true;
+        if (clicked.state === "READY_FOR_TAKEOFF") {
+          this.dragFollowing = clicked;
+        } else {
+          this.dragLine = { 
+            x1: clicked.x, 
+            y1: clicked.y, 
+            x2: x, 
+            y2: y,
+            dragging: true
+          };
+        }
+      }
+    },
+    onDrag(event) {
+      if (!this.dragging || this.gameStatus !== 'running') return;
+      
+      const canvas = this.$refs.radarCanvas;
+      const rect = canvas.getBoundingClientRect();
+      
+      // 计算鼠标拖动的实际坐标，考虑到画布可能被缩放
+      const scaleX = canvas.width / rect.width;
+      const scaleY = canvas.height / rect.height;
+      
+      const newX = (event.clientX - rect.left) * scaleX;
+      const newY = (event.clientY - rect.top) * scaleY;
+      
+        if (this.dragFollowing) {
+          this.dragFollowing.x = newX;
+          this.dragFollowing.y = newY;
+        } else if (this.selectedPlane) {
+        // 问题2修复：在拖拽过程中也检查起飞飞机是否已离开跑道
+        if (this.selectedPlane.state === "TAKEOFF" && !this.isAircraftOffRunway(this.selectedPlane)) {
+          // 飞机还在跑道上，只允许显示跑道方向的拖拽线
+          // 计算跑道方向航向
+          const runwayHeading = (this.selectedPlane.heading + 360) % 360;
+          // 计算沿跑道方向的点
+          const rad = (runwayHeading * Math.PI) / 180;
+          const dx = Math.sin(rad) * 150; // 150像素长的线
+          const dy = -Math.cos(rad) * 150;
+          
+          // 更新拖拽线，只允许沿跑道方向
+          this.dragLine = {
+            x1: this.selectedPlane.x,
+            y1: this.selectedPlane.y,
+            x2: this.selectedPlane.x + dx,
+            y2: this.selectedPlane.y + dy,
+            startHeading: runwayHeading,
+            targetHeading: runwayHeading,
+            dragging: true,
+            isDirectFlight: true,
+            turnDirection: 'none',
+            isOnRunway: true
+          };
+          return;
+        }
+        
+          const dx = newX - this.selectedPlane.x;
+          const dy = newY - this.selectedPlane.y;
+        
+        // 检查是否拖到了跑道入口
+        const runwayCheck = this.checkNearRunwayEntrance(newX, newY);
+        const isNearRunwayEntrance = runwayCheck && runwayCheck.isNear;
+        
+        // 直接使用与飞机移动相同的逻辑计算航向
+        // 飞机移动时使用: dx = Math.sin(rad) * speed; dy = -Math.cos(rad) * speed;
+        // 因此，对于航向计算，我们反向解出rad: rad = Math.atan2(dx, -dy)
+        const targetAngle = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+        
+        // 计算当前航向 (0-359)
+        const currentHeading = Math.round(this.selectedPlane.heading) % 360;
+        
+        // 计算顺时针和逆时针的角度差
+        const clockwiseDiff = (targetAngle - currentHeading + 360) % 360;
+        const counterClockwiseDiff = (currentHeading - targetAngle + 360) % 360;
+        
+        // 判定是否为直线飞行 - 如果角度差很小或是完全相同，视为直线飞行
+        const angleThreshold = 15; // 角度阈值，小于此视为直线
+        const isDirectFlight = clockwiseDiff < angleThreshold || counterClockwiseDiff < angleThreshold;
+        
+        // 确定转向方向 - 选择转弯角度最小的方向
+        let turnDirection = 'none';
+        if (!isDirectFlight) {
+          turnDirection = clockwiseDiff <= counterClockwiseDiff ? 'right' : 'left';
+        }
+        
+        // 保存拖拽中的指令线信息
+          this.dragLine = {
+            x1: this.selectedPlane.x,
+            y1: this.selectedPlane.y,
+            x2: newX,
+          y2: newY,
+          startHeading: currentHeading,
+          targetHeading: targetAngle,
+          turnDirection: turnDirection,
+          clockwiseDiff: clockwiseDiff,
+          counterClockwiseDiff: counterClockwiseDiff,
+          dragging: true,
+          isDirectFlight: isDirectFlight,
+          // 添加跑道相关信息
+          isNearRunwayEntrance: isNearRunwayEntrance,
+          runwayInfo: isNearRunwayEntrance && runwayCheck ? runwayCheck.info : null
+        };
+      }
+    },
+    endDrag(event) {
+      if (!this.dragging || this.gameStatus !== 'running') return;
+      
+      // 处理准备起飞的飞机特殊情况
+      if (this.dragFollowing && this.selectedPlane) {
+        const plane = this.selectedPlane;
+        const x = plane.x;
+        const y = plane.y;
+
+        if (plane.state === "READY_FOR_TAKEOFF") {
+          // 调整跑道位置判断 (中心是900, 600)
+          const onLeftRunway = x >= 800 && x <= 860;
+          const onRightRunway = x >= 940 && x <= 1000;
+
+          if (y < 460 && (onLeftRunway || onRightRunway)) {
+            // 北端起飞，朝南 (18L/18R runway - heading 180)
+            plane.heading = 180;
+            plane.targetHeading = 180;
+            plane.state = "TAKEOFF";
+            plane.speed = 0.2 * this.speedLevel;
+            
+            const runwayId = onLeftRunway ? "18L" : "18R";
+            const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
+            this.speak(message);
+            
+            console.log("Taking off southbound from 18L/18R, heading:", plane.heading);
+          } else if (y > 740 && (onLeftRunway || onRightRunway)) {
+            // 南端起飞，朝北 (00L/00R runway - heading 0)
+            plane.heading = 0;
+            plane.targetHeading = 0;
+            plane.state = "TAKEOFF";
+            plane.speed = 0.2 * this.speedLevel;
+            
+            const runwayId = onLeftRunway ? "00L" : "00R";
+            const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
+            this.speak(message);
+            
+            console.log("Taking off northbound from 00L/00R, heading:", plane.heading);
+          }
+        }
+        
+        plane.selected = false;
+        this.selectedPlane = null;
+        this.dragging = false;
+        this.dragFollowing = null;
+        return;
+      }
+      
+      if (!this.selectedPlane || !this.dragLine) {
+        // 清理状态
+        this.selectedPlane = null;
+        this.dragging = false;
+        this.dragFollowing = null;
+        return;
+      }
+      
+      const plane = this.selectedPlane;
+      
+      // 离开跑道校验
+      if (plane.state === "TAKEOFF" && !this.isAircraftOffRunway(plane)) {
+        // 如果飞机还在跑道上，不允许转向，发出警告提示
+        this.addToCommunicationLog(`${plane.id}, please exit runway before turning`);
+        
+        // 重置拖拽状态
+        plane.selected = false;
+        this.selectedPlane = null;
+        this.dragging = false;
+        this.dragFollowing = null;
+        this.dragLine = null;
+        return;
+      }
+      
+      // 检查是否拖到了跑道入口
+      if (this.dragLine.isNearRunwayEntrance && (plane.state === "APPROACH" || plane.state === "FLYING")) {
+        // 创建一个进场指令
+        const runwayInfo = this.dragLine.runwayInfo;
+        
+        if (!runwayInfo) {
+          console.error("Runway information missing in dragLine");
+          return;
+        }
+        
+        // 设置飞机目标为跑道入口位置
+        const entranceX = runwayInfo.x;
+        const entranceY = runwayInfo.y;
+        
+        // 计算当前航向与最终跑道航向的差异，用于确定转向方向
+        const currentHeading = Math.round(plane.heading) % 360;
+        const finalHeading = runwayInfo.direction;
+        
+        // 保存进场航迹信息，供飞机跟随
+        this.dragLine.dragging = false;
+        this.dragLine.landingApproach = true;
+        this.dragLine.runwayEntrance = {
+          x: entranceX,
+          y: entranceY
+        };
+        this.dragLine.finalHeading = finalHeading;
+        
+        // 使用改进的进场航迹生成方法
+        const pathInfo = this.drawApproachPath(
+          this.ctx,
+          plane.x,
+          plane.y,
+          entranceX,
+          entranceY,
+          currentHeading,
+          finalHeading,
+          true // 默认顺时针转向，实际由航迹规划算法决定
+        );
+        
+        // 直接设置为最终进场状态
+        plane.state = "FINAL_APPROACH";
+        plane.landingRunway = runwayInfo.id;
+        plane.landingDirection = finalHeading;
+        
+        // 在飞机对象上存储进场相关信息，用于实际飞行
+        plane.approachPath = {
+          // 起点和终点
+          startX: plane.x,
+          startY: plane.y,
+          runwayX: entranceX,
+          runwayY: entranceY,
+          
+          // 当前和目标航向
+          startHeading: currentHeading,
+          finalHeading: finalHeading,
+          
+          // 贝塞尔曲线控制点和关键点 - 用于飞机跟随航迹
+          bezierPoints: {
+            start: { x: plane.x, y: plane.y },
+            cp1: pathInfo.controlPoints[0],
+            cp2: pathInfo.controlPoints[1],
+            preApproach: pathInfo.preApproachPoint
+          },
+          finalApproachPoint: pathInfo.finalApproachPoint,
+          
+          // 进场阶段跟踪
+          phase: "INITIAL", // INITIAL -> TURN -> FINAL_APPROACH -> LANDING
+          progressT: 0, // 贝塞尔曲线参数，从0到1
+          lastUpdateTime: Date.now()
+        };
+        
+        // 航迹进场使用贝塞尔曲线插值来更新位置
+        // 不再直接设置目标航向，而是在updateFlights中动态计算
+        
+        // 发布落地许可
+        const message = `${plane.id}, cleared to land runway ${runwayInfo.id}`;
+        this.speak(message);
+        
+        // 保存进场轨迹显示3秒 - 延长显示时间以便观察
+        setTimeout(() => {
+          this.dragLine = null;
+        }, 3000);
+        
+        console.log(`${plane.id} cleared to land runway ${runwayInfo.id}, direction=${finalHeading}°`);
+        } else {
+        // 常规航向指令处理
+        if (this.dragLine.dragging) {
+          // 重新计算目标航向，确保一致性
+          const dx = this.dragLine.x2 - this.dragLine.x1;
+          const dy = this.dragLine.y2 - this.dragLine.y1;
+          const targetHeading = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+          
+          // 更新dragLine和飞机的目标航向
+          this.dragLine.targetHeading = targetHeading;
+          plane.targetHeading = targetHeading;
+        }
+        
+        const targetHeading = Math.round(this.dragLine.targetHeading) % 360;
+        const turnDirection = this.dragLine.turnDirection;
+        
+        // 检查飞机是否处于特殊状态（进场或着陆），如果是则重置状态
+        this.resetApproachOrLandingState(plane);
+        
+        // 确保飞机目标航向与dragLine中的一致
+        plane.targetHeading = targetHeading;
+        
+        // 保存转向方向到飞机对象
+        if (turnDirection && turnDirection !== 'none') {
+          plane.forcedTurnDirection = turnDirection;
+          plane.preferredTurnDirection = turnDirection;
+        }
+        
+        let message;
+        if (this.dragLine.isDirectFlight) {
+          // 直线飞行指令 - 改为英文
+          message = `${plane.id}, maintain heading ${targetHeading}`;
+          plane.forcedTurnDirection = null; // 取消任何转向方向
+          plane.preferredTurnDirection = null;
+        } else {
+          // 转弯指令 - 改为英文
+          const dirText = turnDirection === 'right' ? 'turn right' : 'turn left';
+          message = `${plane.id}, ${dirText} heading ${targetHeading}`;
+          console.log(`${plane.id} 转向指令: ${dirText}, 当前=${Math.round(this.dragLine.startHeading)}°, 目标=${targetHeading}°`);
+        }
+        
+        // 添加到通信日志并播报
+        this.speak(message);
+        
+        // 更新dragLine，将其标记为非拖拽状态，用于显示预计飞行轨迹
+        if (this.dragLine) {
+          this.dragLine.dragging = false;
+        }
+        
+        // 保持预计轨迹显示1.5秒
+        setTimeout(() => {
+          this.dragLine = null;
+        }, 1500);
+      }
+
+      if (plane) {
+        plane.selected = false;
+      }
+      
+        this.selectedPlane = null;
+        this.dragging = false;
+        this.dragFollowing = null;
+    },
+    getGameStatusText() {
+      switch(this.gameStatus) {
+        case 'stopped': return 'Not Started';
+        case 'running': return 'Running';
+        case 'paused': return 'Paused';
+        case 'ended': return 'Ended';
+        default: return 'Unknown';
+      }
+    },
+    // 添加获取难度文本的方法
+    getDifficultyText() {
+      switch(this.difficulty) {
+        case 'beginner': return 'Beginner';
+        case 'intermediate': return 'Intermediate';
+        case 'advanced': return 'Advanced';
+        case 'expert': return 'Expert';
+        default: return 'Unknown';
+      }
+    },
+    // 绘制导航台方法
+    drawNavBeacons(ctx) {
+      // 使用与雷达界面相同的蓝色
+      ctx.fillStyle = "#00ffcc";
+      ctx.strokeStyle = "#00ffcc";
+      ctx.lineWidth = 1;
+      
+      // 绘制每个导航台
+      for (const beacon of this.navBeacons) {
+        // 绘制三角形导航台标记
+        ctx.beginPath();
+        
+        // 三角形的三个顶点
+        const triangleSize = 15;
+        ctx.moveTo(beacon.x, beacon.y - triangleSize); // 顶点
+        ctx.lineTo(beacon.x - triangleSize, beacon.y + triangleSize); // 左下
+        ctx.lineTo(beacon.x + triangleSize, beacon.y + triangleSize); // 右下
+        ctx.closePath();
+        
+        // 描边和填充
+        ctx.stroke();
+        ctx.globalAlpha = 0.5; // 半透明填充
+        ctx.fill();
+        ctx.globalAlpha = 1.0; // 恢复透明度
+        
+        // 绘制导航台ID
+        ctx.font = "14px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(beacon.id, beacon.x, beacon.y - 25);
+        ctx.textAlign = "start";
+      }
+    },
+    // 检查位置是否在跑道入口附近 - 优化检测逻辑
+    checkNearRunwayEntrance(x, y) {
+      // 定义跑道入口区域 - 扩大检测半径以提高检测精度
+      const runwayEntrances = [
+        // 南侧跑道入口 (00L/00R) - 放在前面优先检查
+        { x: 830, y: 770, id: "00L", direction: 0, type: "south", radius: 50 },
+        { x: 970, y: 770, id: "00R", direction: 0, type: "south", radius: 50 },
+        // 北侧跑道入口 (18L/18R)
+        { x: 830, y: 430, id: "18L", direction: 180, type: "north", radius: 50 },
+        { x: 970, y: 430, id: "18R", direction: 180, type: "north", radius: 50 }
+      ];
+      
+      // 检查是否接近任一跑道入口
+      for (const entrance of runwayEntrances) {
+        const distance = Math.sqrt(
+          Math.pow(x - entrance.x, 2) + 
+          Math.pow(y - entrance.y, 2)
+        );
+        
+        if (distance <= entrance.radius) {
+          console.log(`检测到接近跑道入口: ${entrance.id}, 距离=${distance.toFixed(1)}px`);
+          return { 
+            isNear: true, 
+            info: entrance 
+          };
+        }
+      }
+      
+      return { isNear: false };
+    },
+    // 绘制进场轨迹路径 - 完全重写以符合实际飞行原理
+    drawApproachPath(ctx, startX, startY, endX, endY, startHeading, finalHeading, clockwise) {
+      try {
+        // 清除之前的路径，开始一个新路径
+        ctx.beginPath();
+        ctx.moveTo(startX, startY);
+        
+        // 航迹规划的关键点
+        const fromPos = { x: startX, y: startY };
+        const runwayPos = { x: endX, y: endY };
+        
+        // 计算跑道延长线的点 - 向外延伸2000像素，确保足够长
+        const runwayAngle = (finalHeading * Math.PI) / 180;
+        const oppRunwayAngle = ((finalHeading + 180) % 360) * Math.PI / 180;
+        
+        // 计算跑道延长线上的点 - 从跑道反向延伸
+        const extendedRunwayX = runwayPos.x + Math.sin(oppRunwayAngle) * 2000;
+        const extendedRunwayY = runwayPos.y - Math.cos(oppRunwayAngle) * 2000;
+        const extendedRunwayPoint = { x: extendedRunwayX, y: extendedRunwayY };
+        
+        // 确定进场点 - 跑道延长线上距离跑道一定距离的点
+        // 问题2修复: 缩短直线进近航迹长度，从300像素减到100像素，大约是跑道长度的三分之一
+        const finalApproachDistance = 100; // 从300像素改为100像素，更符合游戏尺度
+        const finalApproachX = runwayPos.x + Math.sin(oppRunwayAngle) * finalApproachDistance;
+        const finalApproachY = runwayPos.y - Math.cos(oppRunwayAngle) * finalApproachDistance;
+        const finalApproachPoint = { x: finalApproachX, y: finalApproachY };
+        
+        // 计算从当前位置到进场点的方向向量
+        const toFinalApproachVector = {
+          x: finalApproachPoint.x - fromPos.x,
+          y: finalApproachPoint.y - fromPos.y
+        };
+        
+        // 归一化向量
+        const vectorLength = Math.sqrt(
+          toFinalApproachVector.x * toFinalApproachVector.x + 
+          toFinalApproachVector.y * toFinalApproachVector.y
+        );
+        
+        // 计算当前航向到进场航向的夹角
+        const currHeadingRad = (startHeading * Math.PI) / 180;
+        const targetVector = {
+          x: Math.sin(currHeadingRad),
+          y: -Math.cos(currHeadingRad)
+        };
+        
+        // 问题1修复: 重新设计贝塞尔曲线控制点，确保转弯有自然的弧度，防止原地掉头
+        // 计算当前飞行方向和目标航向之间的夹角
+        const currentDirection = Math.atan2(targetVector.y, targetVector.x);
+        const targetDirection = Math.atan2(-toFinalApproachVector.y, toFinalApproachVector.x);
+        
+        // 计算角度差异（弧度）
+        let angleDiff = targetDirection - currentDirection;
+        // 标准化到 -π 到 π 之间
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        
+        // 根据角度差异确定合适的转弯半径（角度越大，半径越大）
+        const turnRadius = Math.min(vectorLength * 0.4, 200 + Math.abs(angleDiff) * 100);
+        
+        // 基于合适的转弯半径计算基础点和控制点
+        const distanceAlongCurrent = Math.max(turnRadius, vectorLength * 0.2);
+        const basePointX = fromPos.x + targetVector.x * distanceAlongCurrent;
+        const basePointY = fromPos.y + targetVector.y * distanceAlongCurrent;
+        
+        // 计算控制点1 - 从基础点沿当前航向延伸
+        const cp1x = basePointX + targetVector.x * turnRadius * 0.8;
+        const cp1y = basePointY + targetVector.y * turnRadius * 0.8;
+        
+        // 计算进场点之前的点 - 在跑道延长线上
+        const preApproachDistance = finalApproachDistance * 1.4; // 再往外一点
+        const preApproachX = runwayPos.x + Math.sin(oppRunwayAngle) * preApproachDistance;
+        const preApproachY = runwayPos.y - Math.cos(oppRunwayAngle) * preApproachDistance;
+        
+        // 计算控制点2 - 从预进场点沿跑道方向延伸
+        const runwayVector = {
+          x: Math.sin(oppRunwayAngle),
+          y: -Math.cos(oppRunwayAngle)
+        };
+        const cp2x = preApproachX + runwayVector.x * turnRadius * 0.8;
+        const cp2y = preApproachY + runwayVector.y * turnRadius * 0.8;
+        
+        // 调试输出
+        console.log(`绘制航迹 - 角度差: ${(angleDiff * 180 / Math.PI).toFixed(1)}度, 转弯半径: ${turnRadius.toFixed(1)}像素`);
+        
+        // 使用三次贝塞尔曲线绘制平滑的进场航迹
+        // 从当前位置到基础点，再到预进场点，最后到最终进场点
+        ctx.lineTo(basePointX, basePointY); // 沿当前航向飞行一小段
+        
+        // 绘制贝塞尔曲线 - 平滑过渡到跑道延长线
+        ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, preApproachX, preApproachY);
+        
+        // 从预进场点到最终进场点的直线段
+        ctx.lineTo(finalApproachPoint.x, finalApproachPoint.y);
+        
+        // 从最终进场点到跑道入口的直线段 - 这是最终进近航段
+        ctx.lineTo(runwayPos.x, runwayPos.y);
+        
+        // 设置虚线样式绘制航迹
+        ctx.setLineDash([5, 5]); // 5像素线段，5像素间隔
+        ctx.strokeStyle = "#00ffcc";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        
+        // 绘制箭头指示方向 - 多个箭头以显示路径方向
+        // 重置线型为实线，以绘制箭头
+        ctx.setLineDash([]);
+        
+        // 在贝塞尔曲线中间位置绘制一个箭头
+        const midPointT = 0.5; // 贝塞尔曲线的中点参数
+        const midPointX = Math.pow(1-midPointT, 3) * basePointX +
+                          3 * Math.pow(1-midPointT, 2) * midPointT * cp1x +
+                          3 * (1-midPointT) * Math.pow(midPointT, 2) * cp2x +
+                          Math.pow(midPointT, 3) * preApproachX;
+        
+        const midPointY = Math.pow(1-midPointT, 3) * basePointY +
+                          3 * Math.pow(1-midPointT, 2) * midPointT * cp1y +
+                          3 * (1-midPointT) * Math.pow(midPointT, 2) * cp2y +
+                          Math.pow(midPointT, 3) * preApproachY;
+        
+        // 计算贝塞尔曲线在中点处的切线方向
+        const tangentX = -3 * Math.pow(1-midPointT, 2) * basePointX +
+                         3 * (Math.pow(1-midPointT, 2) - 2 * (1-midPointT) * midPointT) * cp1x +
+                         3 * (2 * (1-midPointT) * midPointT - Math.pow(midPointT, 2)) * cp2x +
+                         3 * Math.pow(midPointT, 2) * preApproachX;
+                         
+        const tangentY = -3 * Math.pow(1-midPointT, 2) * basePointY +
+                         3 * (Math.pow(1-midPointT, 2) - 2 * (1-midPointT) * midPointT) * cp1y +
+                         3 * (2 * (1-midPointT) * midPointT - Math.pow(midPointT, 2)) * cp2y +
+                         3 * Math.pow(midPointT, 2) * preApproachY;
+        
+        // 归一化切线向量
+        const tangentLength = Math.sqrt(tangentX * tangentX + tangentY * tangentY);
+        const normalizedTangentX = tangentX / tangentLength;
+        const normalizedTangentY = tangentY / tangentLength;
+        
+        // 在曲线中点绘制箭头
+        this.drawArrowHead(ctx, midPointX, midPointY, 
+                          normalizedTangentX, normalizedTangentY, 10);
+        
+        // 在最终进场点绘制箭头
+        this.drawArrowHead(ctx, finalApproachPoint.x, finalApproachPoint.y, 
+                          Math.sin(runwayAngle), -Math.cos(runwayAngle), 10);
+        
+        // 还原默认线型，防止影响后续绘制
+        ctx.setLineDash([]);
+        
+        // 返回进场航迹信息用于飞机导航
+        // 确保返回值包含所有必要的信息
+        const pathInfo = {
+          controlPoints: [
+            { x: cp1x, y: cp1y },
+            { x: cp2x, y: cp2y }
+          ],
+          preApproachPoint: { x: preApproachX, y: preApproachY },
+          finalApproachPoint: { x: finalApproachX, y: finalApproachY },
+          // 估算贝塞尔曲线长度 - 用于计算飞行时间
+          curveLength: Math.sqrt(Math.pow(preApproachX - startX, 2) + Math.pow(preApproachY - startY, 2)) * 1.3
+        };
+        
+        return pathInfo;
+      } catch (error) {
+        console.error("绘制进场路径时出错:", error);
+        
+        // 即使出错，也返回一个有效的对象
+        return {
+          controlPoints: [
+            { x: startX + 100, y: startY },
+            { x: endX - 100, y: endY }
+          ],
+          preApproachPoint: { x: endX, y: endY },
+          finalApproachPoint: { x: endX, y: endY },
+          curveLength: 500
+        };
+      }
+    },
+    
+    // 绘制箭头头部的辅助方法
+    drawArrowHead(ctx, x, y, dirX, dirY, size) {
+      // 保存当前绘图状态
+      ctx.save();
+      
+      // 设置颜色和样式
+      ctx.fillStyle = "#00ffcc";
+      
+      // 绘制箭头
+      ctx.beginPath();
+      
+      // 计算垂直于方向的向量
+      const perpX = -dirY;
+      const perpY = dirX;
+      
+      // 箭头三个点的坐标
+      const tipX = x;
+      const tipY = y;
+      
+      // 箭头后面两个点
+      const leftX = x - size * dirX + size * 0.5 * perpX;
+      const leftY = y - size * dirY + size * 0.5 * perpY;
+      
+      const rightX = x - size * dirX - size * 0.5 * perpX;
+      const rightY = y - size * dirY - size * 0.5 * perpY;
+      
+      // 绘制箭头路径
+      ctx.moveTo(tipX, tipY);
+      ctx.lineTo(leftX, leftY);
+      ctx.lineTo(rightX, rightY);
+      ctx.closePath();
+      
+      // 填充箭头
+      ctx.fill();
+      
+      // 恢复之前的绘图状态
+      ctx.restore();
+    },
+    // 新增方法 - 更新进场飞行的飞机位置和航向 - 简化版本，确保可靠
+    updateApproachFlight(plane) {
+      try {
+        // 基本检查
+        if (!plane || !plane.approachPath) {
+          console.log("updateApproachFlight: 无效的飞机或路径");
+          return false;
+        }
+        
+        // 如果飞机收到新命令，立即取消进场过程
+        if (plane.newCommandIssued) {
+          console.log(`${plane.id} 在进场过程中收到新命令，立即取消进场`);
+          plane.state = "FLYING";
+          plane.speed = 0.4 * this.speedLevel;
+          plane.approachPath = null;
+          plane.approachPathCreated = false;
+          plane.landingRunway = null;
+          plane.newCommandIssued = false;
+          plane._updatingApproach = false;
+          return false; // 返回false让常规更新处理新的命令
+        }
+        
+        // 防止重复调用造成问题
+        if (plane._updatingApproach) {
+          return true; // 已经在更新中，返回true避免常规更新
+        }
+        plane._updatingApproach = true;
+        
+        // 简化逻辑：确保所有必要的数据都存在
+        const path = plane.approachPath;
+        if (!path.bezierPoints || !path.phase) {
+          console.error(`${plane.id} 进场路径数据不完整`);
+          plane._updatingApproach = false;
+          return false;
+        }
+        
+        // 更新时间间隔
+        const now = Date.now();
+        const dt = Math.min((now - (path.lastUpdateTime || now)) / 1000, 0.1); 
+        path.lastUpdateTime = now;
+        
+        // 确保使用固定速度
+        const speed = path.originalSpeed || plane.speed || 0.5;
+        plane.speed = speed; // 保持速度恒定
+        
+        // 根据进场阶段处理
+        try {
+          switch(path.phase) {
+            case "INITIAL":
+              // 贝塞尔曲线跟随 - 简化逻辑
+              
+              // 确保曲线长度已计算
+              if (!path.curveLength) {
+                path.curveLength = 500; // 使用安全默认值
+                path.totalDistance = 0;
+              }
+              
+              // 累计移动的距离并计算进度
+              path.totalDistance = (path.totalDistance || 0) + speed * dt * 60;
+              path.progressT = Math.min(path.totalDistance / path.curveLength, 1.0);
+              
+              // 切换到最终阶段
+              if (path.progressT >= 1.0) {
+                path.progressT = 1.0;
+                path.phase = "FINAL_APPROACH";
+                console.log(`${plane.id} 进入最终进场阶段`);
+                plane._updatingApproach = false;
+                return true;
+              }
+              
+              // 计算当前位置 - 使用简化的贝塞尔曲线计算
+              this.updatePlaneBezierPosition(plane, path.progressT);
+              break;
+              
+            case "FINAL_APPROACH":
+              // 最终进场 - 直线飞向跑道入口
+              
+              // 计算到跑道入口的距离
+              const dx = path.runwayX - plane.x;
+              const dy = path.runwayY - plane.y;
+              const distToRunway = Math.sqrt(dx*dx + dy*dy);
+              
+              // 设置飞机航向为跑道方向
+              plane.heading = path.finalHeading;
+              plane.targetHeading = path.finalHeading;
+              
+              // 匀速移动
+              const rad = (path.finalHeading * Math.PI) / 180;
+              plane.x += Math.sin(rad) * speed;
+              plane.y += -Math.cos(rad) * speed;
+              
+              // 检查是否到达跑道入口
+              if (distToRunway < 20) {
+                // 进入着陆阶段
+                plane.state = "LANDING";
+                plane.x = path.runwayX;
+                plane.y = path.runwayY;
+                plane.runway = plane.landingRunway;
+                plane.landingStartTime = Date.now();
+                plane.originalSpeed = plane.speed; // 保存原始速度，用于降落过程中的减速计算
+                plane.landingDirection = plane.landingRunway.startsWith("18") ? 180 : 0; // 设置着陆方向
+                
+                // 发出着陆确认
+                const message = `${plane.id}, landing runway ${plane.landingRunway}`;
+                this.addToCommunicationLog(message);
+                
+                console.log(`${plane.id} 到达跑道入口，开始着陆`);
+                
+                // 清除目标跑道数据，防止重复处理
+                plane.targetRunwayX = undefined;
+                plane.targetRunwayY = undefined;
+                
+                // 跳过常规航向更新
+              }
+              break;
+              
+            default:
+              console.warn(`${plane.id} 未知的进场阶段: ${path.phase}`);
+              plane._updatingApproach = false;
+              return false;
+          }
+        } catch (phaseError) {
+          console.error(`处理${plane.id}的${path.phase}阶段时出错:`, phaseError);
+          // 使用安全的线性移动
+          this.moveTowardsRunway(plane);
+        }
+        
+        plane._updatingApproach = false;
+        return true;
+        
+      } catch (error) {
+        console.error("updateApproachFlight严重错误:", error);
+        
+        // 重置状态防止卡住
+        if (plane) {
+          plane._updatingApproach = false;
+          plane.state = "APPROACH";
+          plane.approachPath = null;
+        }
+        
+        return false;
+      }
+    },
+    
+    // 安全地更新飞机在贝塞尔曲线上的位置
+    updatePlaneBezierPosition(plane, t) {
+      try {
+        const path = plane.approachPath;
+        if (!path || !path.bezierPoints) return;
+        
+        // 贝塞尔点
+        const p0 = path.bezierPoints.start;
+        const p1 = path.bezierPoints.cp1;
+        const p2 = path.bezierPoints.cp2;
+        const p3 = path.bezierPoints.preApproach;
+        
+        // 计算位置
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const mt3 = mt2 * mt;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        
+        // 位置
+        const x = mt3 * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t3 * p3.x;
+        const y = mt3 * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t3 * p3.y;
+        
+        // 更新飞机位置
+        if (!isNaN(x) && !isNaN(y)) {
+          plane.x = x;
+          plane.y = y;
+          
+          // 计算切线方向用于航向
+          const dx = 3 * mt2 * (p1.x - p0.x) + 6 * mt * t * (p2.x - p1.x) + 3 * t2 * (p3.x - p2.x);
+          const dy = 3 * mt2 * (p1.y - p0.y) + 6 * mt * t * (p2.y - p1.y) + 3 * t2 * (p3.y - p2.y);
+          
+          // 计算航向
+          if (dx !== 0 || dy !== 0) {
+            let heading = Math.atan2(dx, -dy) * 180 / Math.PI;
+            if (heading < 0) heading += 360;
+            plane.heading = Math.round(heading);
+            plane.targetHeading = plane.heading;
+          }
+        } else {
+          // 位置计算出错，使用备用方法
+          this.moveTowardsRunway(plane);
+        }
+      } catch (error) {
+        console.error("计算贝塞尔位置时出错:", error);
+        this.moveTowardsRunway(plane);
+      }
+    },
+    
+    // 当贝塞尔曲线计算失败时，使用简单的线性移动
+    moveTowardsRunway(plane) {
+      try {
+        if (!plane || !plane.approachPath) return;
+        
+        const path = plane.approachPath;
+        const speed = path.originalSpeed || plane.speed || 0.5;
+        
+        // 向跑道方向移动
+        const dx = path.runwayX - plane.x;
+        const dy = path.runwayY - plane.y;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        
+        if (dist > 0) {
+          plane.x += (dx / dist) * speed;
+          plane.y += (dy / dist) * speed;
+          
+          // 更新航向指向跑道
+          let heading = Math.atan2(dx, -dy) * 180 / Math.PI;
+          if (heading < 0) heading += 360;
+          plane.heading = Math.round(heading);
+          plane.targetHeading = plane.heading;
+        }
+      } catch (error) {
+        console.error("备用移动方法出错:", error);
+      }
+    },
+    // 添加新方法，检查飞机是否已经离开跑道区域
+    isAircraftOffRunway(plane) {
+      // 判断飞机是否已离开跑道区域
+        const x = plane.x;
+        const y = plane.y;
+
+      // 定义跑道区域范围（两条跑道公用的判断）
+      const isOnRunwayX = (x >= 800 && x <= 860) || (x >= 940 && x <= 1000);
+      const isOnRunwayY = y >= 430 && y <= 770;
+      
+      // 判断飞机航向
+      const heading = plane.heading;
+      const isFlyingNorth = (heading >= 330 || heading <= 30); // 向北飞行
+      const isFlyingSouth = (heading >= 150 && heading <= 210); // 向南飞行
+      
+      // 定义跑道出口区域（出了这个区域才算完全离开跑道）
+      const northExitY = 380; // 北侧出口
+      const southExitY = 820; // 南侧出口
+      
+      // 默认为已离开跑道
+      let isOffRunway = true;
+      
+      // 如果在跑道X坐标范围内，需进一步判断
+      if (isOnRunwayX) {
+        if (isFlyingNorth) {
+          // 向北起飞，必须超过北端跑道限制
+          isOffRunway = y < northExitY;
+          if (!isOffRunway) {
+            console.log(`${plane.id} 北向起飞中，尚未离开跑道安全区域 (y=${y.toFixed(1)}, 需小于${northExitY})`);
+          }
+        } else if (isFlyingSouth) {
+          // 向南起飞，必须超过南端跑道限制
+          isOffRunway = y > southExitY;
+          if (!isOffRunway) {
+            console.log(`${plane.id} 南向起飞中，尚未离开跑道安全区域 (y=${y.toFixed(1)}, 需大于${southExitY})`);
+          }
+        } else {
+          // 航向不明确，使用保守判断
+          isOffRunway = !isOnRunwayY;
+        }
+      }
+      
+      // 如果飞机确实离开了跑道，记录日志，但不发送通话信息
+      if (isOffRunway && isOnRunwayX) {
+        console.log(`${plane.id} 已离开跑道安全区域，可以接受指令`);
+      }
+      
+      return isOffRunway;
+    },
+    
+    // 初始化语音识别 - 支持多语言
+    initSpeechRecognition() {
+      if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+        console.error('Browser does not support speech recognition');
+        return;
+      }
+      
+      // 如果已存在识别对象，先清理
+      if (this.recognition) {
+        try {
+          this.recognition.onresult = null;
+          this.recognition.onerror = null;
+          this.recognition.onend = null;
+          this.recognition.abort();
+        } catch (e) {
+          // 忽略可能的错误
+        }
+      }
+      
+      // 创建语音识别对象
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      this.recognition = new SpeechRecognition();
+      
+      // 配置语音识别 - 英文
+      this.recognition.continuous = true; // Enable continuous recognition
+      this.recognition.interimResults = true; // 显示中间结果
+      this.recognition.lang = 'en-US'; // 使用英语
+      this.recognition.maxAlternatives = 5; // 增加备选识别结果数量
+      
+      // 处理识别结果
+      this.recognition.onresult = (event) => {
+        const result = event.results[event.results.length - 1];
+        
+        // 尝试找到最佳匹配结果
+        let bestTranscript = "";
+        let highestConfidence = 0;
+        
+        // 检查所有可能的识别结果
+        for (let i = 0; i < result.length; i++) {
+          const transcript = result[i].transcript.trim();
+          const confidence = result[i].confidence;
+          
+          // 针对航空通信进行简单的评分 - 偏好包含航班号和航空术语的结果
+          let score = confidence;
+          
+          // 增加包含航班号格式的识别结果权重
+          if (/\b(b|bravo)\s*\d{4}\b/i.test(transcript) || /\b\d{4}\b/i.test(transcript)) {
+            score += 0.2;
+          }
+          
+          // 增加包含常见航空指令的权重 - 使用英文术语
+          const aviationTerms = ["heading", "turn", "left", "right", "runway", "cleared", "land", "takeoff"];
+            
+          for (const term of aviationTerms) {
+            if (transcript.toLowerCase().includes(term)) {
+              score += 0.05;
+            }
+          }
+          
+          if (score > highestConfidence) {
+            highestConfidence = score;
+            bestTranscript = transcript;
+          }
+        }
+        
+        // 将语音识别到的"BRAVO"替换为"B"，用于显示
+        let displayText = bestTranscript;
+        displayText = displayText.replace(/\bbravo\b/gi, "B");
+        this.voiceCommandText = displayText;
+        
+        // 如果是最终结果并且有意义的内容，处理语音指令
+        if (result.isFinal && displayText.trim() !== '') {
+          console.log("Speech recognition result:", bestTranscript, "confidence:", highestConfidence);
+          this.processVoiceCommand(displayText);
+          
+          // In continuous mode, immediately restart recognition
+          if (this.continuousMode && this.isRecording) {
+            try {
+              this.recognition.stop(); // Stop the current session
+              
+              // Start a new session with slight delay to ensure clean restart
+              setTimeout(() => {
+                if (this.isRecording && this.continuousMode) {
+                  try {
+                    this.recognition.start();
+                  } catch (err) {
+                    console.error('Failed to restart continuous recognition:', err);
+                  }
+                }
+              }, 100);
+            } catch (err) {
+              console.error('Error restarting continuous recognition:', err);
+            }
+          }
+        }
+      };
+      
+      // 错误处理
+      this.recognition.onerror = (event) => {
+        console.error('Speech recognition error:', event.error);
+        
+        // Don't stop recording in continuous mode for no-speech errors
+        if (event.error === 'no-speech' && this.continuousMode) {
+          console.log('No speech detected, but continuing in continuous mode');
+          return;
+        }
+        
+        this.isRecording = false;
+      };
+      
+      // 识别结束
+      this.recognition.onend = () => {
+        console.log('Speech recognition ended');
+        
+        // In continuous mode, restart recognition if it ends unexpectedly
+        if (this.continuousMode && this.isRecording) {
+          console.log('Restarting recognition in continuous mode');
+          try {
+            setTimeout(() => {
+              if (this.isRecording && this.continuousMode) {
+                try {
+                  this.recognition.start();
+                } catch (err) {
+                  console.error('Failed to restart continuous recognition:', err);
+                  this.isRecording = false;
+                }
+              }
+            }, 100);
+          } catch (err) {
+            console.error('Error in continuous recognition:', err);
+            this.isRecording = false;
+          }
+        } else {
+          // In normal mode or when explicitly stopped
+          if (this.voiceCommandText && this.voiceCommandText.trim() !== '' && !this.continuousMode) {
+            this.processVoiceCommand(this.voiceCommandText);
+          }
+          
+          if (!this.continuousMode) {
+            this.isRecording = false;
+          }
+          
+          // Clear display text after 5 seconds if not in continuous mode
+          if (!this.continuousMode) {
+            setTimeout(() => {
+              this.voiceCommandText = '';
+            }, 5000);
+          }
+        }
+      };
+    },
+    
+    // 开始语音命令 - 支持多语言
+    startVoiceCommand(continuous = false) {
+      if (!this.recognition || this.gameStatus !== 'running' || this.isRecording) return;
+      
+      // 防止频繁点击
+      const now = Date.now();
+      if (now - this.lastVoiceCommandTime < 500) return;
+      this.lastVoiceCommandTime = now;
+      
+      console.log('Starting recording...');
+      this.isRecording = true;
+      this.voiceCommandText = '';
+      this.continuousMode = continuous; // Store whether we're in continuous mode
+      
+      try {
+        // 确保之前的识别已结束
+        try {
+          this.recognition.stop();
+        } catch (e) {
+          // 忽略可能的错误
+        }
+        
+        // 重新创建识别对象以确保干净的状态，并确保使用正确的语言
+        this.initSpeechRecognition();
+        
+        // 启动新的识别 - 增加延迟防止可能的性能问题
+        this.voiceRecognitionTimeout = setTimeout(() => {
+          try {
+            this.recognition.start();
+          } catch (startError) {
+            console.error('语音识别启动失败:', startError);
+            this.isRecording = false;
+          }
+        }, 150);
+      } catch (e) {
+        console.error('Failed to start speech recognition:', e);
+        this.isRecording = false;
+      }
+    },
+    
+    // 停止语音命令 - 确保可靠执行
+    stopVoiceCommand() {
+      if (!this.isRecording) return;
+      
+      console.log('停止录音...');
+      
+      // 清除可能的计时器
+      if (this.voiceRecognitionTimeout) {
+        clearTimeout(this.voiceRecognitionTimeout);
+        this.voiceRecognitionTimeout = null;
+      }
+      
+      try {
+        this.recognition.stop();
+      } catch (e) {
+        console.error('语音识别停止失败:', e);
+      }
+      
+      // 即使recognition.stop()失败也标记为已停止
+      this.isRecording = false;
+      this.continuousMode = false;
+    },
+    
+    // 处理语音指令 - 支持多语言
+    processVoiceCommand(command) {
+      if (!command || this.gameStatus !== 'running') return;
+      
+      // 添加命令频率限制，防止短时间内多次处理导致性能问题
+      const now = Date.now();
+      if (now - this.lastVoiceCommandProcessTime < 300) { // 至少间隔300ms
+        console.log('命令处理过于频繁，忽略此次命令');
+        return;
+      }
+      this.lastVoiceCommandProcessTime = now;
+      
+      // 记录原始命令
+      console.log(isEnglish ? 'Received voice command:' : '收到语音指令:', command);
+      
+      try {
+        // 预处理和规范化命令
+        let processedCommand = command.toLowerCase().trim();
+        
+        // 标准陆空通话用语替换 - 仅保留规范用语
+        const standardCorrections = isEnglish 
+          ? {
+              // B前缀标准化
+              'bravo ': 'b',
+              
+              // 标准航向指令
+              'heading': 'heading',
+              'turn left': 'turn left',
+              'turn right': 'turn right',
+              
+              // 标准起飞指令
+              'takeoff': 'take off',
+              'cleared for takeoff': 'take off',
+              
+              // 标准着陆指令
+              'cleared to land': 'land',
+              
+              // 标准跑道术语
+              'runway': 'runway'
+            }
+          : {
+              // 标准航班号前缀
+              '比': 'b',
+              
+              // 标准航向指令
+              '航向': '航向',
+              '左转': '左转',
+              '右转': '右转',
+              
+              // 标准起飞指令
+              '起飞': '起飞',
+              
+              // 标准着陆指令
+              '着陆': '着陆',
+              
+              // 标准跑道术语
+              '跑道': '跑道'
+            };
+        
+        for (const [standard, correction] of Object.entries(standardCorrections)) {
+          processedCommand = processedCommand.replace(new RegExp(standard, 'gi'), correction);
+        }
+        
+        // 转换中文数字为阿拉伯数字
+        if (!isEnglish) {
+          const chineseDigitMap = {
+            '洞': '0', '零': '0',
+            '幺': '1', '一': '1', '壹': '1',
+            '两': '2', '二': '2', '贰': '2', '兩': '2',
+            '三': '3', '叁': '3',
+            '四': '4', '肆': '4',
+            '五': '5', '伍': '5',
+            '六': '6', '陆': '6', '陸': '6',
+            '七': '7', '柒': '7', '拐': '7',
+            '八': '8', '捌': '8',
+            '九': '9', '玖': '9'
+          };
+          
+          // 替换中文数字
+          for (const [chinese, arabic] of Object.entries(chineseDigitMap)) {
+            processedCommand = processedCommand.replace(new RegExp(chinese, 'g'), arabic);
+          }
+          
+          console.log("中文数字替换后:", processedCommand);
+          
+          // 特别处理四位连续数字的中文表达 (如"幺两三四"，"六九两三")
+          const chineseDigitPattern = /([洞零幺一壹两二贰兩三叁四肆五伍六陆陸七柒拐八捌九玖]{4})/g;
+          const chineseMatches = [...processedCommand.matchAll(chineseDigitPattern)];
+          
+          if (chineseMatches.length > 0) {
+            let chineseDigits = chineseMatches[0][1];
+            let arabicDigits = "";
+            
+            // 将每个中文数字转换为阿拉伯数字
+            for (let i = 0; i < chineseDigits.length; i++) {
+              if (chineseDigitMap[chineseDigits[i]]) {
+                arabicDigits += chineseDigitMap[chineseDigits[i]];
+              }
+            }
+            
+            if (arabicDigits.length === 4) {
+              console.log(`识别中文航班号: ${chineseDigits} -> ${arabicDigits}`);
+              // 直接在命令中添加阿拉伯数字形式，保留原来的中文表达
+              processedCommand = processedCommand.replace(chineseMatches[0][0], 
+                chineseMatches[0][0] + " " + arabicDigits);
+            }
+          }
+        }
+        
+        // 转换为小写并清理
+        const normalizedCommand = processedCommand;
+        
+        // 提取飞机ID和指令 - 更优先识别4位数字
+        let targetPlaneId = null;
+        let instruction = normalizedCommand;
+        
+        // 识别航班号 - 提取4位数字
+        const digitPattern = /\b(\d{4})\b/g;
+        const digitMatches = [...normalizedCommand.matchAll(digitPattern)];
+        
+        if (digitMatches.length > 0) {
+          const digits = digitMatches[0][1];
+          console.log("识别到4位数字:", digits);
+          
+          // 在所有飞机中查找匹配的ID
+          const matchingPlanes = this.airplanes.filter(plane => {
+            // 提取飞机ID中的数字部分
+            const planeDigits = plane.id.replace(/\D/g, '');
+            // 精确匹配后四位数字
+            return planeDigits.endsWith(digits) || planeDigits === digits;
+          });
+          
+          if (matchingPlanes.length > 0) {
+            // 找到匹配的飞机
+            targetPlaneId = matchingPlanes[0].id;
+            console.log(`找到匹配航班: ${targetPlaneId}, 通过数字: ${digits}`);
+          } else {
+            // 使用B+数字作为ID
+            targetPlaneId = "B" + digits;
+            console.log(`构造航班ID: ${targetPlaneId}`);
+          }
+        }
+        
+        // 如果未识别到航班号但有选中的飞机，则使用选中的飞机
+        if (!targetPlaneId && this.selectedPlane) {
+          targetPlaneId = this.selectedPlane.id;
+          console.log(`使用当前选中的飞机: ${targetPlaneId}`);
+        }
+
+        if (!targetPlaneId) {
+          this.addToCommunicationLog(isEnglish 
+            ? "No target aircraft specified, please select an aircraft or include a flight number in your command"
+            : "未指定目标飞机，请先选择飞机或在指令中包含航班号");
+          return;
+        }
+        
+        // 查找对应的飞机
+        const plane = this.getPlaneById(targetPlaneId);
+        if (!plane) {
+          this.addToCommunicationLog(isEnglish 
+            ? `Flight ${targetPlaneId} not found`
+            : `航班 ${targetPlaneId} 未找到`);
+          return;
+        }
+        
+        // 如果飞机是当前选中飞机，则显示选中效果
+        if (!plane.selected) {
+          this.selectPlane(plane);
+        }
+        
+        // 提取指令部分 - 移除航班号
+        instruction = normalizedCommand.replace(new RegExp(`\\b${targetPlaneId}\\b`, 'i'), '').trim();
+        console.log(`分离出指令部分: "${instruction}"`);
+        
+        // 检查是否是落地相关指令
+        const isLandingCommand = isEnglish 
+          ? instruction.includes('land') || instruction.includes('landing')
+          : instruction.includes('着陆') || instruction.includes('落地');
+          
+        // 如果飞机正在进场落地但收到的不是落地指令，取消当前的落地进程
+        if (plane.state === "FINAL_APPROACH" && !isLandingCommand) {
+          console.log(`${targetPlaneId} 正在进场落地，收到非着陆指令"${instruction}"，取消落地指令`);
+          
+          // 标记飞机已收到新命令，确保在下一帧更新时取消进场
+          plane.newCommandIssued = true;
+          
+          // 修改：不要现在就设置为APPROACH状态，让newCommandIssued处理
+          // 在下一个更新循环中会处理这个标记，将状态设置为FLYING
+          // plane.state = "APPROACH";
+          // plane.approachPath = null;
+          // plane.approachPathCreated = false;
+          // plane.landingRunway = null;
+          
+          // 通知用户
+          this.addToCommunicationLog(isEnglish 
+            ? `${targetPlaneId}, landing approach canceled`
+            : `${targetPlaneId}，取消进场着陆`);
+        }
+        
+        // ===== 严格的标准陆空通话指令识别 =====
+        console.log(`分析指令: "${instruction}"`);
+        
+        // 1. 检查起飞指令
+        if (isEnglish) {
+          if (instruction.includes('take off')) {
+            // 尝试提取跑道号
+            const runwayMatch = instruction.match(/runway\s+(\d+)\s*([lr])/i);
+            let runwayId = null;
+            
+            if (runwayMatch) {
+              runwayId = runwayMatch[1] + runwayMatch[2].toUpperCase();
+            }
+            
+            console.log("识别为起飞指令" + (runwayId ? `，跑道${runwayId}` : ""));
+            
+            // 标记飞机收到新命令，确保在下一帧取消进场
+            const targetPlane = this.getPlaneById(targetPlaneId);
+            if (targetPlane) {
+              targetPlane.newCommandIssued = true;
+            }
+            
+              targetPlane.newCommandIssued = true;
+              this.processTakeoffCommand(targetPlaneId, instruction);
+            } else {
+              console.warn(`起飞指令目标飞机 ${targetPlaneId} 不存在`);
+              this.addToCommunicationLog(isEnglish
+                ? `Aircraft ${targetPlaneId} not found`
+                : `航班 ${targetPlaneId} 未找到`);
+            
+          }
+        } else {
+          if (instruction.includes('起飞')) {
+            // 尝试提取跑道号
+            const runwayMatch = instruction.match(/跑道\s*(\d+)\s*([左右])/i);
+            let runwayId = null;
+            
+            if (runwayMatch) {
+              const direction = runwayMatch[2] === "左" ? "L" : "R";
+              runwayId = runwayMatch[1] + direction;
+            }
+            
+            console.log("识别为起飞指令" + (runwayId ? `，跑道${runwayId}` : ""));
+            
+            // 标记飞机收到新命令，确保在下一帧取消进场
+            const targetPlane = this.getPlaneById(targetPlaneId);
+            if (targetPlane) {
+              targetPlane.newCommandIssued = true;
+            }
+            
+              targetPlane.newCommandIssued = true;
+              this.processTakeoffCommand(targetPlaneId, instruction);
+            } else {
+              console.warn(`起飞指令目标飞机 ${targetPlaneId} 不存在`);
+              this.addToCommunicationLog(isEnglish
+                ? `Aircraft ${targetPlaneId} not found`
+                : `航班 ${targetPlaneId} 未找到`);
+            
+          }
+        }
+        
+        // 2. 检查着陆指令
+        if ((isEnglish && instruction.includes('land')) || 
+            (!isEnglish && instruction.includes('着陆'))) {
+          
+          console.log("识别为着陆指令");
+          
+          // 确认飞机存在并标记新命令
+          const targetPlane = this.getPlaneById(targetPlaneId);
+          if (targetPlane) {
+            targetPlane.newCommandIssued = true;
+            this.processLandingCommand(targetPlaneId, instruction);
+          } else {
+            console.warn(`着陆指令目标飞机 ${targetPlaneId} 不存在`);
+            this.addToCommunicationLog(isEnglish 
+              ? `Aircraft ${targetPlaneId} not found`
+              : `航班 ${targetPlaneId} 未找到`);
+          }
+          return;
+        }
+        
+        // 3. 检查航向指令
+        let isHeadingCommand = false;
+        let turnDirection = null;
+        
+        if (isEnglish) {
+          // 英文转向指令：turn left/right heading XXX
+          if (instruction.includes('turn left')) {
+            turnDirection = 'left';
+            isHeadingCommand = true;
+          } else if (instruction.includes('turn right')) {
+            turnDirection = 'right';
+            isHeadingCommand = true;
+          } else if (instruction.includes('heading')) {
+            isHeadingCommand = true;
+          }
+        } else {
+          // 中文转向指令：左转/右转航向XXX
+          if (instruction.includes('左转')) {
+            turnDirection = 'left';
+            isHeadingCommand = true;
+          } else if (instruction.includes('右转')) {
+            turnDirection = 'right';
+            isHeadingCommand = true;
+          } else if (instruction.includes('航向')) {
+            isHeadingCommand = true;
+          }
+        }
+        
+        if (isHeadingCommand) {
+          // 尝试提取航向数字
+          const headingMatch = instruction.match(/\b(\d{1,3})\b/);
+          if (headingMatch) {
+            const heading = parseInt(headingMatch[1]);
+            if (heading >= 0 && heading <= 360) {
+              console.log(`识别为航向指令: ${heading}°, 转向: ${turnDirection || '自动'}`);
+              
+              // 标记飞机收到新命令，确保在下一帧取消进场
+              const targetPlane = this.getPlaneById(targetPlaneId);
+              if (targetPlane) {
+                targetPlane.newCommandIssued = true;
+                this.processHeadingCommand(targetPlaneId, instruction);
+              } else {
+                console.warn(`航向指令目标飞机 ${targetPlaneId} 不存在`);
+                this.addToCommunicationLog(isEnglish 
+                  ? `Aircraft ${targetPlaneId} not found`
+                  : `航班 ${targetPlaneId} 未找到`);
+              }
+              return;
+            }
+          }
+        }
+        
+        // 未识别的指令
+        this.addToCommunicationLog(isEnglish 
+          ? `Command not recognized. Use standard ATC phrases like "turn heading 180" or "cleared to land runway 00L"`
+          : `未识别标准陆空通话用语。请使用"左转航向180"或"着陆跑道00左"等标准用语`);
+      } catch (processingError) {
+        console.error('处理语音命令时出错:', processingError);
+        this.addToCommunicationLog(isEnglish 
+          ? 'Error processing voice command'
+          : '处理语音命令时出错');
+        return;
+      }
+      
+      // 接下来原有的处理流程
+      // ... existing code ...
+    },
+    
+    // 处理航向指令 - 支持多语言
+    processHeadingCommand(planeId, command) {
+      console.log(`处理航向指令: "${command}" 对 ${planeId}`);
+      
+      try {
+        const plane = this.getPlaneById(planeId);
+        if (!plane) {
+          this.addToCommunicationLog(isEnglish 
+            ? `${planeId} not found`
+            : `${planeId} 未找到`);
+          return;
+        }
+        
+        // 如果飞机正在进场落地，取消落地指令并恢复到正常航行状态
+        if (plane.state === "FINAL_APPROACH") {
+          console.log(`${planeId} 正在进场落地，取消落地指令并恢复到正常航行状态`);
+          
+          // 标记飞机收到新命令，确保在下一帧更新时取消进场
+          plane.newCommandIssued = true;
+          
+          // 清除进场路径数据
+          plane.state = "APPROACH";
+          plane.approachPath = null;
+          plane.approachPathCreated = false;
+          plane.landingRunway = null;
+          
+          // 通知用户
+          this.addToCommunicationLog(isEnglish 
+            ? `${planeId}, landing approach canceled`
+            : `${planeId}，取消进场着陆`);
+        }
+        
+        // 提取目标航向
+        let targetHeading = null;
+        let turnDirection = null;
+        
+        // 标准陆空通话用语格式的航向指令
+        if (isEnglish) {
+          // 英文标准格式: "turn left/right heading XXX"
+          const leftTurnMatch = command.match(/turn\s+left\s+heading\s+(\d{1,3})/i);
+          const rightTurnMatch = command.match(/turn\s+right\s+heading\s+(\d{1,3})/i);
+          const headingMatch = command.match(/heading\s+(\d{1,3})/i);
+          
+          if (leftTurnMatch) {
+            targetHeading = parseInt(leftTurnMatch[1]);
+            turnDirection = 'left';
+          } else if (rightTurnMatch) {
+            targetHeading = parseInt(rightTurnMatch[1]);
+            turnDirection = 'right';
+          } else if (headingMatch) {
+            targetHeading = parseInt(headingMatch[1]);
+          }
+        } else {
+          // 中文标准格式: "左转/右转航向XXX"
+          const leftTurnMatch = command.match(/左转\s*航向\s*(\d{1,3})/i);
+          const rightTurnMatch = command.match(/右转\s*航向\s*(\d{1,3})/i);
+          const headingMatch = command.match(/航向\s*(\d{1,3})/i);
+          
+          if (leftTurnMatch) {
+            targetHeading = parseInt(leftTurnMatch[1]);
+            turnDirection = 'left';
+          } else if (rightTurnMatch) {
+            targetHeading = parseInt(rightTurnMatch[1]);
+            turnDirection = 'right';
+          } else if (headingMatch) {
+            targetHeading = parseInt(headingMatch[1]);
+          }
+        }
+        
+        // 未找到有效航向
+        if (targetHeading === null) {
+          // 只转向但没有指定航向的情况
+          if (command.includes('left') || command.includes('左转')) {
+            // 左转 30 度
+            turnDirection = 'left';
+            targetHeading = (plane.heading - 30 + 360) % 360;
+          } else if (command.includes('right') || command.includes('右转')) {
+            // 右转 30 度
+            turnDirection = 'right';
+            targetHeading = (plane.heading + 30) % 360;
+          } else {
+            this.addToCommunicationLog(isEnglish 
+              ? `Invalid heading command format. Please use "turn heading XXX" or "turn left/right heading XXX"`
+              : `航向指令格式无效。请使用"航向XXX"或"左转/右转航向XXX"`);
+            return;
+          }
+        }
+        
+        // 确保航向在有效范围内
+        targetHeading = Math.max(0, Math.min(359, targetHeading));
+        
+        // 计算最佳转向方向（如果未指定）
+        if (!turnDirection) {
+          // 计算顺时针和逆时针距离
+          const clockwiseDist = (targetHeading - plane.heading + 360) % 360;
+          const counterClockwiseDist = (plane.heading - targetHeading + 360) % 360;
+          
+          // 选择较短的转向方向
+          turnDirection = clockwiseDist <= counterClockwiseDist ? 'right' : 'left';
+        }
+        
+        // 检查飞机是否处于特殊状态（进场或着陆），如果是则重置状态
+        this.resetApproachOrLandingState(plane);
+        
+        // 设置飞机的目标航向
+        plane.targetHeading = targetHeading;
+        plane.state = plane.state === 'HOLDING' ? 'HOLDING' : 'FLYING';
+        
+        // 添加到通信日志并播报
+        const message = isEnglish
+          ? `${planeId}, turn ${turnDirection} heading ${targetHeading}`
+          : `${planeId}, ${turnDirection === 'left' ? '左' : '右'}转航向${targetHeading}`;
+        
+        this.speak(message);
+          
+        console.log(`航向命令已接受: ${planeId} 转向 ${targetHeading}° (${turnDirection})`);
+        
+        // 更新dragLine，将其标记为非拖拽状态，用于显示预计飞行轨迹
+        if (this.dragLine) {
+          this.dragLine.dragging = false;
+        }
+        
+        // 保持预计轨迹显示1.5秒
+        setTimeout(() => {
+          this.dragLine = null;
+        }, 1500);
+      } catch (error) {
+        console.error('处理航向指令时出错:', error);
+        this.addToCommunicationLog(isEnglish
+          ? `Error processing heading command for ${planeId}`
+          : `处理${planeId}的航向指令时出错`);
+      }
+    },
+    
+    // 处理着陆指令 - 极简版本，确保不会卡住
+    processLandingCommand(planeId, command) {
+      console.log(`处理着陆指令: "${command}" 对 ${planeId}`);
+      
+      try {
+        const plane = this.getPlaneById(planeId);
+        if (!plane) {
+          this.addToCommunicationLog(isEnglish 
+            ? `${planeId} not found`
+            : `${planeId} 未找到`);
+          return;
+        }
+        
+        // 如果飞机不在空中，无法执行着陆
+        if (plane.state !== "FLYING" && plane.state !== "APPROACH" && plane.state !== "FINAL_APPROACH") {
+          this.addToCommunicationLog(isEnglish 
+            ? `${planeId} cannot execute landing command in current state`
+            : `${planeId} 当前状态下无法执行着陆指令`);
+          return;
+        }
+        
+        // 提取跑道号 - 只支持标准格式
+        let runwayId = null;
+        if (isEnglish) {
+          // 英文标准格式: "land runway 00L"
+          const runwayMatch = command.match(/runway\s+(\d{2})([LRCrlc]?)/i);
+          if (runwayMatch) {
+            runwayId = runwayMatch[1] + (runwayMatch[2] ? runwayMatch[2].toUpperCase() : '');
+          }
+        } else {
+          // 中文标准格式: "着陆跑道00左"
+          const runwayMatch = command.match(/跑道\s*(\d{2})([左右中]?)/i);
+          if (runwayMatch) {
+            const directionMap = { '左': 'L', '右': 'R', '中': 'C' };
+            const direction = runwayMatch[2] ? directionMap[runwayMatch[2]] || '' : '';
+            runwayId = runwayMatch[1] + direction;
+          }
+        }
+        
+        // 验证跑道ID
+        if (!runwayId) {
+          this.addToCommunicationLog(isEnglish 
+            ? `${planeId}, please specify runway for landing (e.g. "land runway 00L")`
+            : `${planeId}，请指定着陆跑道（例如"着陆跑道00左"）`);
+          return;
+        }
+        
+        // 匹配有效的跑道
+        const runway = this.runways.find(r => r.id === runwayId);
+        if (!runway) {
+          this.addToCommunicationLog(isEnglish 
+            ? `Runway ${runwayId} not found`
+            : `跑道${runwayId}未找到`);
+          return;
+        }
+        
+        console.log(`处理${planeId}向跑道${runwayId}的着陆请求`);
+        
+        // 计算跑道入口坐标
+        const runwayEntrance = this.getRunwayEntrance(runway);
+        if (!runwayEntrance) {
+          console.error(`无法找到跑道${runwayId}的入口坐标`);
+          return;
+        }
+        
+        // 设置飞机状态为进场
+        plane.state = "APPROACH";
+        plane.landingRunway = runwayId;
+        
+        // 设置进场路径的终点（跑道入口）
+        const runwayEntranceX = runwayEntrance.x;
+        const runwayEntranceY = runwayEntrance.y;
+        
+        // 创建进场路径 - 使用贝塞尔曲线
+        try {
+          // 检查飞机是否在跑道入口附近
+          const isNearRunwayEntrance = this.checkNearRunwayEntrance(plane, runwayId);
+          
+          if (isNearRunwayEntrance) {
+            // 如果已经在跑道入口附近，直接设置为最终进场状态
+            console.log(`${planeId}已在跑道${runwayId}入口附近，直接设置为最终进场状态`);
+            plane.state = "FINAL_APPROACH";
+            plane.targetHeading = runway.heading;
+            
+            // 添加到通信日志并播报
+            const message = isEnglish
+              ? `${planeId}, cleared to land runway ${runwayId}`
+              : `${planeId}，着陆跑道${runwayId}`;
+            
+            this.speak(message);
+          } else {
+            // 计算进场路径
+            this.createApproachPath(plane, runway);
+            
+            // 添加到通信日志并播报
+            const message = isEnglish
+              ? `${planeId}, cleared to land runway ${runwayId}`
+              : `${planeId}，着陆跑道${runwayId}`;
+            
+            this.speak(message);
+          }
+        } catch (error) {
+          console.error('创建进场路径时出错:', error);
+          this.addToCommunicationLog(isEnglish
+            ? `Error processing landing command for ${planeId}`
+            : `处理${planeId}的着陆指令时出错`);
+        }
+      } catch (error) {
+        console.error('处理着陆指令时出错:', error);
+        this.addToCommunicationLog(isEnglish
+          ? `Error processing landing command for ${planeId}`
+          : `处理${planeId}的着陆指令时出错`);
+      }
+    },
+    
+    // 获取跑道入口坐标
+    getRunwayEntrance(runway) {
+      // 根据跑道朝向确定入口位置
+      if (runway.heading === 0) {  // 朝北跑道 (00L/00R)
+        return { x: runway.startX, y: runway.startY - 50 };
+      } else if (runway.heading === 180) {  // 朝南跑道 (18L/18R)
+        return { x: runway.startX, y: runway.startY + 50 };
+      }
+      return null;
+    },
+    
+    // 创建进场路径
+    createApproachPath(plane, runway) {
+      // 定义跑道入口
+      const entrance = this.getRunwayEntrance(runway);
+      
+      // 设置进场路径
+      const startX = plane.x;
+      const startY = plane.y;
+      const endX = entrance.x;
+      const endY = entrance.y;
+      
+      // 基于飞机位置和跑道方向计算贝塞尔曲线控制点
+      // 控制点1：飞机当前位置朝目标方向的初始控制点
+      // 控制点2：跑道入口前的最终控制点，与跑道方向对齐
+      const deltaX = endX - startX;
+      const deltaY = endY - startY;
+      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+      
+      // 计算标准化方向向量
+      const dirX = deltaX / distance;
+      const dirY = deltaY / distance;
+      
+      // 控制点1：沿飞机当前航向的点
+      const planeHeadingRad = plane.heading * Math.PI / 180;
+      const control1X = startX + Math.sin(planeHeadingRad) * distance * 0.3;
+      const control1Y = startY - Math.cos(planeHeadingRad) * distance * 0.3;
+      
+      // 控制点2：根据跑道方向设置的进近点
+      const runwayHeadingRad = runway.heading * Math.PI / 180;
+      const control2X = endX - Math.sin(runwayHeadingRad) * 150;
+      const control2Y = endY + Math.cos(runwayHeadingRad) * 150;
+      
+      // 创建贝塞尔曲线路径
+      plane.approachPath = {
+        start: { x: startX, y: startY },
+        control1: { x: control1X, y: control1Y },
+        control2: { x: control2X, y: control2Y },
+        end: { x: endX, y: endY }
+      };
+      
+      // 设置进场状态
+      plane.state = "APPROACH";
+      plane.approachPathCreated = true;
+      
+      console.log(`已为${plane.id}创建到跑道${runway.id}的进场路径`);
+    },
+    
+    // 处理起飞指令 - 支持多语言和语音识别
+    processTakeoffCommand(planeId, command) {
+      console.log(`处理起飞指令: "${command}" 对 ${planeId}`);
+      
+      try {
+        const plane = this.getPlaneById(planeId);
+        if (!plane) {
+          this.addToCommunicationLog(isEnglish 
+            ? `${planeId} not found`
+            : `${planeId} 未找到`);
+          return;
+        }
+        
+        // 如果飞机正在进场落地，取消落地指令并恢复到正常航行状态
+        if (plane.state === "FINAL_APPROACH") {
+          console.log(`${planeId} 正在进场落地，取消落地指令并恢复到正常航行状态`);
+          
+          // 标记飞机收到新命令，确保在下一帧更新时取消进场
+          plane.newCommandIssued = true;
+          
+          // 清除进场路径数据
+          plane.state = "APPROACH";
+          plane.approachPath = null;
+          plane.approachPathCreated = false;
+          plane.landingRunway = null;
+          
+          // 通知用户
+          this.addToCommunicationLog(isEnglish 
+            ? `${planeId}, landing approach canceled`
+            : `${planeId}，取消进场着陆`);
+        }
+        
+        // 提取跑道号
+        let runwayId = null;
+        
+        // 从指令中提取跑道号 - 标准格式
+        if (isEnglish) {
+          // 英文标准格式："take off runway 00L"
+          const runwayMatch = command.match(/runway\s+(\d{2})([LRCrlc]?)/i);
+          if (runwayMatch) {
+            runwayId = runwayMatch[1] + (runwayMatch[2] ? runwayMatch[2].toUpperCase() : '');
+          }
+        } else {
+          // 中文标准格式："起飞跑道00左"
+          const runwayMatch = command.match(/跑道\s*(\d{2})([左右中]?)/i);
+          if (runwayMatch) {
+            const directionMap = { '左': 'L', '右': 'R', '中': 'C' };
+            const direction = runwayMatch[2] ? directionMap[runwayMatch[2]] || '' : '';
+            runwayId = runwayMatch[1] + direction;
+          }
+        }
+        
+        console.log("提取的跑道号:", runwayId);
+        
+        // 如果飞机已在跑道上，且未指定新跑道，则使用当前跑道
+        if (!runwayId && plane.state === 'READY_FOR_TAKEOFF') {
+          runwayId = plane.runway;
+          console.log(`飞机已在跑道${runwayId}上，准备起飞`);
+        }
+        
+        // 如果指定了跑道，将飞机移至跑道
+        if (runwayId) {
+          // 查找匹配的跑道
+          const runway = this.runways.find(r => r.id === runwayId);
+          if (!runway) {
+            this.addToCommunicationLog(isEnglish
+              ? `Runway ${runwayId} not found`
+              : `跑道${runwayId}未找到`);
+            return;
+          }
+          
+          console.log(`将${planeId}移动到跑道${runwayId}起飞位置`);
+          
+          // 设置飞机位置到跑道入口
+          plane.x = runway.startX;
+          plane.y = runway.startY;
+          plane.heading = runway.heading;
+          plane.targetHeading = runway.heading;
+          plane.state = 'READY_FOR_TAKEOFF';
+          plane.runway = runway.id;
+          
+          // 添加到通信日志并播报
+          const message = isEnglish
+            ? `${planeId}, cleared for takeoff runway ${runwayId}`
+            : `${planeId}，起飞跑道${runwayId}`;
+          
+          this.speak(message);
+            
+          return;
+        }
+        
+        // 处理无跑道指定的起飞命令 - 飞机必须已经在跑道上
+        if (plane.state === 'READY_FOR_TAKEOFF') {
+          console.log(`${planeId}开始起飞，无需指定跑道（已在跑道上）`);
+          plane.state = 'TAKEOFF';
+          plane.speed = 0.2 * this.speedLevel; // 使用与进场飞机相同的速度
+          
+          // 添加到通信日志并播报
+          const message = isEnglish
+            ? `${planeId}, cleared for takeoff runway ${plane.runway}`
+            : `${planeId}，起飞跑道${plane.runway}`;
+          
+          this.speak(message);
+            
+        } else {
+          // 飞机不在跑道上，无法起飞
+          this.addToCommunicationLog(isEnglish
+            ? `${planeId} not on runway. Please specify runway (e.g. "takeoff runway 00L")`
+            : `${planeId}不在跑道上。请指定跑道（例如"起飞跑道00左"）`);
+        }
+      } catch (error) {
+        console.error('处理起飞指令时出错:', error);
+        this.addToCommunicationLog(isEnglish
+          ? `Error processing takeoff command for ${planeId}`
+          : `处理${planeId}的起飞指令时出错`);
+      }
+    },
+    
+    // 计算进场路径
+    calculateApproachPath(plane) {
+      try {
+        if (!plane || !plane.landingRunway) {
+          console.error("无法计算进场路径：飞机或跑道信息缺失", plane);
+          return;
+        }
+        
+        // 获取跑道入口信息
+        const entrances = {
+          "18L": { x: 830, y: 430 },
+          "18R": { x: 970, y: 430 },
+          "00L": { x: 830, y: 770 },
+          "00R": { x: 970, y: 770 }
+        };
+        
+        // 确保进场计算有效
+        if (!entrances[plane.landingRunway]) {
+          console.error(`无效的跑道标识: ${plane.landingRunway}`);
+          return;
+        }
+        
+        // 获取跑道入口和跑道方向
+        const entrance = entrances[plane.landingRunway];
+        const entranceX = entrance.x;
+        const entranceY = entrance.y;
+        const finalHeading = plane.landingRunway.startsWith("18") ? 180 : 0;
+        
+        // 获取当前飞机信息
+        const startX = plane.x;
+        const startY = plane.y;
+        const currentHeading = Math.round(plane.heading) % 360;
+        
+        // 计算从当前位置到跑道入口的方向向量
+        const dx = entranceX - startX;
+        const dy = entranceY - startY;
+        const distance = Math.sqrt(dx*dx + dy*dy);
+        
+        // 设置正确的转弯方向
+        const clockwiseDiff = (finalHeading - currentHeading + 360) % 360;
+        const counterClockwiseDiff = (currentHeading - finalHeading + 360) % 360;
+        const shouldTurnClockwise = clockwiseDiff <= counterClockwiseDiff;
+        const turnDir = shouldTurnClockwise ? "right" : "left";
+        
+        // 为绘制航线创建拖拽线信息
+        this.dragLine = {
+          startX: startX,
+          startY: startY,
+          endX: entranceX,
+          endY: entranceY,
+          startHeading: currentHeading,
+          finalHeading: finalHeading,
+          shouldTurnClockwise: shouldTurnClockwise,
+          landingApproach: true,
+          runwayEntrance: entrance,
+          runwayId: plane.landingRunway
+        };
+        
+        // 使用简化的贝塞尔曲线控制点计算
+        // 创建一个简单的S形曲线连接当前位置和跑道入口
+        
+        // 1. 计算跑道延长线上的进场点
+        const runwayAngle = (finalHeading * Math.PI) / 180;
+        const oppRunwayAngle = ((finalHeading + 180) % 360) * Math.PI / 180;
+        
+        // 简化：最终进近点 - 跑道延长线上的点
+        const finalApproachDistance = 100;
+        const finalApproachX = entranceX + Math.sin(oppRunwayAngle) * finalApproachDistance;
+        const finalApproachY = entranceY - Math.cos(oppRunwayAngle) * finalApproachDistance;
+        
+        // 2. 计算控制点 - 简化计算，避免复杂的角度和向量计算
+        // 控制点1 - 从起点沿当前航向延伸一段距离
+        const headingRad = (currentHeading * Math.PI) / 180;
+        const controlDist1 = Math.min(distance * 0.3, 150);
+        const cp1x = startX + Math.sin(headingRad) * controlDist1;
+        const cp1y = startY - Math.cos(headingRad) * controlDist1;
+        
+        // 控制点2 - 从进场点沿跑道方向延伸
+        const controlDist2 = Math.min(distance * 0.3, 150);
+        const cp2x = finalApproachX + Math.sin(oppRunwayAngle) * controlDist2;
+        const cp2y = finalApproachY - Math.cos(oppRunwayAngle) * controlDist2;
+        
+        // 设置飞机的进场路径信息 - 简化版本
+        plane.approachPath = {
+          // 基本信息
+          startX: startX,
+          startY: startY,
+          runwayX: entranceX,
+          runwayY: entranceY,
+          startHeading: currentHeading,
+          finalHeading: finalHeading,
+          
+          // 贝塞尔曲线点
+          bezierPoints: {
+            start: { x: startX, y: startY },
+            cp1: { x: cp1x, y: cp1y },
+            cp2: { x: cp2x, y: cp2y },
+            preApproach: { x: finalApproachX, y: finalApproachY }
+          },
+          
+          // 进场状态
+          phase: "INITIAL",
+          progressT: 0,
+          lastUpdateTime: Date.now(),
+          originalSpeed: plane.speed
+        };
+        
+        // 确保更新方法知道如何处理这个飞机
+        plane.approachPathCreated = true;
+        
+        // 重置任何可能存在的新命令标记，避免立即取消
+        plane.newCommandIssued = false;
+        
+        // 将进场航线显示3秒
+        setTimeout(() => {
+          if (this.dragLine && this.dragLine.landingApproach) {
+            this.dragLine = null;
+          }
+        }, 3000);
+        
+        // 记录日志
+        this.addToCommunicationLog(`${plane.id} starting approach, runway ${plane.landingRunway}`);
+        console.log(`${plane.id} approach path calculated [runway=${plane.landingRunway}, heading=${finalHeading}°]`);
+      } catch (error) {
+        // 捕获任何可能发生的错误，防止游戏卡住
+        console.error("计算进场路径时出错:", error);
+      }
+    },
+    
+    // 找到被点击的飞机
+    findClickedPlane(x, y) {
+      // 考虑到飞机图标的大小，使用更合适的点击区域
+      const clickRadius = 30; // 点击判定半径
+      
+      return this.airplanes.find(plane => {
+        const distance = Math.sqrt(
+          Math.pow(plane.x - x, 2) + 
+          Math.pow(plane.y - y, 2)
+        );
+        return distance < clickRadius;
+      });
+    },
+    // 处理键盘按下事件
+    handleKeyDown(event) {
+      // 如果是空格键且游戏正在运行，启动语音识别
+      if (event.code === 'Space' && this.gameStatus === 'running' && !this.spacePressHandled) {
+        // 防止默认行为（页面滚动）
+        event.preventDefault();
+        
+        // 标记空格键已处理，防止重复触发
+        this.spacePressHandled = true;
+        
+        // 启动语音识别
+        this.startVoiceCommand();
+      }
+    },
+    
+    // 处理键盘释放事件
+    handleKeyUp(event) {
+      // 如果是空格键且正在录音，停止语音识别
+      if (event.code === 'Space' && this.isRecording) {
+        event.preventDefault();
+        this.spacePressHandled = false;
+        this.stopVoiceCommand();
+      }
+    },
+    onKeyDown(event) {
+      // 检查是否是左Shift键 (16是Shift键的keyCode)
+      if (event.keyCode === 16 && event.location === 1) { // location 1表示左Shift
+        // 防止事件重复触发
+        if (!this.shiftKeyPressed) {
+          this.shiftKeyPressed = true;
+          this.startVoiceCommand(true); // Pass true to indicate continuous mode
+        }
+        // 防止触发浏览器默认行为
+        event.preventDefault();
+      }
+    },
+    onKeyUp(event) {
+      // 检查是否是左Shift键释放
+      if (event.keyCode === 16 && event.location === 1) {
+        this.shiftKeyPressed = false;
+        this.stopVoiceCommand();
+        // 防止触发浏览器默认行为
+        event.preventDefault();
+      }
+    },
+    // 添加贝塞尔曲线计算辅助函数
+    evaluateBezierCurve(t, p0, p1, p2, p3) {
+      try {
+        // 安全检查输入参数
+        if (t < 0 || t > 1 || !p0 || !p1 || !p2 || !p3) {
+          console.error("贝塞尔曲线参数错误", { t, p0, p1, p2, p3 });
+          return null;
+        }
+        
+        // 计算贝塞尔曲线上的点
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const mt3 = mt2 * mt;
+        const t2 = t * t;
+        const t3 = t2 * t;
+        
+        return {
+          x: mt3 * p0.x + 3 * mt2 * t * p1.x + 3 * mt * t2 * p2.x + t3 * p3.x,
+          y: mt3 * p0.y + 3 * mt2 * t * p1.y + 3 * mt * t2 * p2.y + t3 * p3.y
+        };
+      } catch (error) {
+        console.error("贝塞尔曲线计算错误", error);
+        return { x: p0.x, y: p0.y }; // 返回起点作为安全值
+      }
+    },
+    
+    // 计算贝塞尔曲线在参数t处的切线方向
+    evaluateBezierTangent(t, p0, p1, p2, p3) {
+      try {
+        // 安全检查输入参数
+        if (t < 0 || t > 1 || !p0 || !p1 || !p2 || !p3) {
+          console.error("贝塞尔切线参数错误", { t, p0, p1, p2, p3 });
+          return { x: 1, y: 0 }; // 默认向右
+        }
+        
+        // 计算贝塞尔曲线在t处的切线方向
+        const mt = 1 - t;
+        const mt2 = mt * mt;
+        const t2 = t * t;
+        
+        // 计算导数
+        const dx = 3 * mt2 * (p1.x - p0.x) + 6 * mt * t * (p2.x - p1.x) + 3 * t2 * (p3.x - p2.x);
+        const dy = 3 * mt2 * (p1.y - p0.y) + 6 * mt * t * (p2.y - p1.y) + 3 * t2 * (p3.y - p2.y);
+        
+        // 归一化切线向量
+        const length = Math.sqrt(dx * dx + dy * dy);
+        if (length < 0.0001) {
+          return { x: 1, y: 0 }; // 防止除以零
+        }
+        
+        return {
+          x: dx / length,
+          y: dy / length
+        };
+      } catch (error) {
+        console.error("贝塞尔切线计算错误", error);
+        return { x: 1, y: 0 }; // 默认向右
+      }
+    },
+    
+    // 估算贝塞尔曲线长度 - 使用线段近似方法
+    calculateBezierLength(p0, p1, p2, p3) {
+      try {
+        // 安全检查
+        if (!p0 || !p1 || !p2 || !p3) {
+          console.error("贝塞尔长度计算参数错误", { p0, p1, p2, p3 });
+          return 300; // 返回一个安全的默认值
+        }
+        
+        // 使用分段线性近似估算贝塞尔曲线长度
+        const segments = 20; // 分段数，可以根据需要调整精度
+        let length = 0;
+        let prevPoint = p0;
+        
+        for (let i = 1; i <= segments; i++) {
+          const t = i / segments;
+          const point = this.evaluateBezierCurve(t, p0, p1, p2, p3);
+          
+          if (point) {
+            const dx = point.x - prevPoint.x;
+            const dy = point.y - prevPoint.y;
+            length += Math.sqrt(dx * dx + dy * dy);
+            prevPoint = point;
+          }
+        }
+        
+        // 增加一个安全系数，确保不会低估曲线长度
+        return length * 1.1;
+      } catch (error) {
+        console.error("计算贝塞尔曲线长度错误", error);
+        return 300; // 返回一个安全的默认值
+      }
+    },
+    // 获取中文难度名称
+    getChineseDifficulty() {
+      const difficultyMap = {
+        'easy': '简单',
+        'medium': '中等',
+        'hard': '困难'
+      };
+      return difficultyMap[this.difficulty] || '未知';
+    },
+    // 新方法：检查并生成新飞机以维持游戏难度
+    checkAndSpawnNewAircraft() {
+      // 如果游戏不在运行状态，不生成新飞机
+      if (this.gameStatus !== 'running') return;
+      
+      console.log(`检查飞机数量: 当前 ${this.airplanes.length}/${this.currentMaxAircraftCount}`);
+      
+      // 如果当前飞机数量低于最大限制，生成新飞机
+      if (this.airplanes.length < this.currentMaxAircraftCount) {
+        // 随机决定生成进场还是起飞飞机
+        const spawnType = Math.random() < 0.7 ? 'approach' : 'departure';
+        
+        if (spawnType === 'approach') {
+          this.spawnApproach();
+        } else {
+          this.spawnDeparture();
+        }
+        
+        console.log(`当前飞机数量(${this.airplanes.length})低于最大限制(${this.currentMaxAircraftCount})，生成新飞机`);
+      }
+    },
+    // 重置进场和着陆状态，确保飞机能执行新命令
+    resetApproachOrLandingState(plane) {
+      if (!plane) return false;
+      
+      // 检查当前状态
+      const needsReset = plane.state === "FINAL_APPROACH" || plane.state === "LANDING";
+      
+      if (needsReset) {
+        console.log(`${plane.id} 正在${plane.state === "FINAL_APPROACH" ? "进场" : "着陆"}，但收到新命令，将其状态重置为FLYING`);
+        
+        // 重置为飞行状态
+        plane.state = "FLYING";
+        plane.speed = 0.2 * this.speedLevel; // 使用正常速度
+        
+        // 清除进场相关数据
+        plane.approachPath = null;
+        plane.approachPathCreated = false;
+        plane.landingRunway = null;
+        
+        // 清除跑道相关数据
+        plane.targetRunwayX = undefined;
+        plane.targetRunwayY = undefined;
+        plane.runway = null;
+        
+        return true;
+      }
+      
+      return false;
+    },
+  },
+  watch: {
+    speedLevel() {
+      for (const plane of this.airplanes) {
+        if (plane.state !== "READY_FOR_TAKEOFF") {
+          plane.speed = 0.2 * this.speedLevel;
+        }
+      }
+    },
+    // 监听难度变化，如果在游戏运行中切换难度，重新设置生成间隔
+    difficulty() {
+      if (this.gameStatus === 'running') {
+        // 清除现有间隔
+        clearInterval(this.spawnApproachInterval);
+        clearInterval(this.spawnDepartureInterval);
+        
+        // 使用新难度设置
+        const settings = this.currentDifficultySettings;
+        this.spawnApproachInterval = setInterval(this.spawnApproach, settings.approach);
+        this.spawnDepartureInterval = setInterval(this.spawnDeparture, settings.departure);
+        
+        // 添加难度变更信息到通信记录
+        const difficultyText = this.getDifficultyText();
+        this.addToCommunicationLog(`Difficulty changed to: ${difficultyText}`);
+      }
+    }
+  }
+};
+</script>
+
