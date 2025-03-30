@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>空中交通管制模拟器</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #000;
+      color: #fff;
+      font-family: 'Arial', sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+    }
+    header {
+      background-color: #001a33;
+      color: #00ffcc;
+      padding: 1rem;
+      text-align: center;
+    }
+    main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 1rem;
+    }
+    .game-container {
+      width: 100%;
+      max-width: 1800px;
+      height: 90vh;
+      margin: 0 auto;
+      border: 2px solid #00ffcc;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+    }
+    .game-description {
+      max-width: 800px;
+      margin: 2rem auto;
+      padding: 1rem;
+      background-color: #001a33;
+      border-radius: 8px;
+      color: #e0e0e0;
+    }
+    footer {
+      padding: 1rem;
+      background-color: #001a33;
+      color: #00ffcc;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>空中交通管制模拟器</h1>
+  </header>
+  
+  <main>
+    <div class="game-container">
+      <iframe src="game.html" title="空中交通管制模拟器"></iframe>
+    </div>
+    
+    <div class="game-description">
+      <h2>游戏介绍</h2>
+      <p>欢迎来到空中交通管制模拟器，这是一款具有挑战性和沉浸感的游戏，让你化身为空中交通管制员。你的任务是管理空域，确保空中交通的安全和高效流动。</p>
+      
+      <h3>游戏玩法</h3>
+      <p>使用鼠标拖拽的方式来指挥飞机的航向。将等待起飞的飞机拖拽到跑道端口即可发出起飞指令；将即将落地的飞机拖拽到跑道端口处即可发出落地指令。</p>
+      
+      <h3>游戏规则</h3>
+      <ul>
+        <li>如果飞机之间的间隔小于安全距离，游戏将结束。</li>
+        <li>飞机飞出管制区将导致游戏结束。</li>
+        <li>地面等待的飞机超过1分钟，游戏也会结束。</li>
+      </ul>
+    </div>
+  </main>
+  
+  <footer>
+    <p>© 2024 空中交通管制模拟器 | 版权所有</p>
+  </footer>
+</body>
+</html> 
