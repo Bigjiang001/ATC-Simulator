@@ -5,8 +5,12 @@ import vue from '@vitejs/plugin-vue'
 export default defineConfig({
   plugins: [vue()],
   build: {
-    // 生成单个HTML文件
+    // 支持多个HTML入口文件
     rollupOptions: {
+      input: {
+        main: './index.html',
+        game: './game.html'
+      },
       output: {
         manualChunks: undefined,
         inlineDynamicImports: true
