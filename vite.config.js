@@ -13,10 +13,9 @@ export default defineConfig({
       },
       output: {
         manualChunks: undefined
-        
       }
     },
-    // 尝试将CSS内联到HTML中
+    // 强制内联所有CSS
     cssCodeSplit: false
   },
   base: '/ATC-Simulator/'
