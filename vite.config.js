@@ -12,8 +12,8 @@ export default defineConfig({
         game: './game.html'
       },
       output: {
-        manualChunks: undefined,
-        inlineDynamicImports: true
+        manualChunks: undefined
+        
       }
     },
     // 尝试将CSS内联到HTML中
