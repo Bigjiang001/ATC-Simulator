@@ -1,13 +1,389 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="./atc.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ATC-Simulator空管模拟器</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>空中交通管制模拟器</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <style>
+    html { scroll-behavior: smooth; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: #000;
+      color: #fff;
+      overflow-x: hidden;
+      position: relative;
+    }
+    header, .hero, footer { text-align: center; }
+    header {
+      width: 100%; padding: 20px 40px;
+      display: flex; justify-content: space-between; align-items: center;
+      border-bottom: 1px solid #333;
+      background-color: #000;
+      position: fixed; top: 0; z-index: 10;
+    }
+    .logo { font-size: 20px; font-weight: 800; color: #fff; }
+    nav a {
+      margin-left: 24px;
+      text-decoration: none;
+      color: #fff;
+      font-weight: 500;
+      transition: color 0.3s;
+    }
+    nav a:hover { color: #00bfff; }
+    
+    /* 下拉菜单样式 */
+    .dropdown {
+      position: relative;
+      display: inline-block;
+    }
+    .dropdown-content {
+      display: none;
+      position: absolute;
+      background-color: #111;
+      min-width: 180px;
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.5);
+      z-index: 1;
+      border-radius: 5px;
+      overflow: hidden;
+    }
+    .dropdown-content a {
+      color: #fff;
+      padding: 12px 16px;
+      text-decoration: none;
+      display: block;
+      text-align: left;
+      margin: 0;
+      transition: background-color 0.3s;
+    }
+    .dropdown-content a:hover {
+      background-color: #222;
+      color: #00bfff;
+    }
+    .dropdown:hover .dropdown-content {
+      display: block;
+    }
+    .dropdown-btn {
+      cursor: pointer;
+      margin-left: 24px;
+      text-decoration: none;
+      color: #fff;
+      font-weight: 500;
+      transition: color 0.3s;
+      background: none;
+      border: none;
+      font-family: 'Inter', sans-serif;
+      font-size: 16px;
+    }
+    .dropdown-btn:hover {
+      color: #00bfff;
+    }
+    
+    .hero {
+      height: 100vh; display: flex; flex-direction: column;
+      justify-content: center; align-items: center; padding-top: 80px;
+      position: relative; z-index: 1;
+    }
+    .hero h1 { font-size: 72px; font-weight: 700; margin-bottom: 30px; }
+    .hero p { font-size: 32px; color: #ccc; margin-bottom: 50px; }
+    .hero button {
+      padding: 14px 28px; background-color: #00bfff; color: #000;
+      font-size: 16px; font-weight: 600; border: none; border-radius: 8px;
+      cursor: pointer; transition: background-color 0.3s;
+    }
+    .hero button:hover { background-color: #009acd; }
+    .intro-section {
+      max-width: 1200px; margin: 80px auto; padding: 40px 20px;
+      display: flex; flex-direction: column; gap: 80px;
+    }
+    .intro-block {
+      display: flex; 
+      align-items: center; 
+      gap: 60px; /* 增加间距 */
+      flex-wrap: nowrap; /* 确保不换行 */
+      margin-bottom: 30px;
+      padding: 20px;
+    }
+    .intro-block:nth-child(even) { flex-direction: row-reverse; }
+    .intro-block img {
+      flex: 0 0 45%; /* 不允许缩小 */
+      max-width: 600px;
+      min-width: 300px; /* 确保图片不会太小 */
+      border-radius: 10px;
+      width: 100%;
+      height: auto;
+      box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+      transition: transform 0.3s ease;
+    }
+    .intro-block img:hover {
+      transform: scale(1.03);
+    }
+    .intro-text {
+      flex: 0 0 45%; /* 不允许缩小 */
+      font-size: 18px; 
+      line-height: 1.8; 
+      color: #ccc;
+      padding: 20px;
+    }
+    .intro-text h2 {
+      color: #00bfff;
+      margin-bottom: 15px;
+    }
+    .checklist-section {
+      background: #111;
+      padding: 80px 20px;
+    }
+    .checklist-section h2 {
+      font-size: 36px;
+      text-align: center;
+      margin-bottom: 40px;
+    }
+    .checklist-img {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 40px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .checklist-img img {
+      width: 100%;
+      border-radius: 10px;
+      border: 1px solid #333;
+    }
+    .checklist-text {
+      font-size: 18px;
+      line-height: 1.8;
+      color: #ccc;
+      max-width: 900px;
+      margin: 40px auto;
+    }
+    footer {
+      width: 100%; text-align: center;
+      padding: 20px; background-color: #111; color: #888;
+      font-size: 14px;
+    }
+    
+    /* 添加媒体查询，处理屏幕宽度小于900px的情况 */
+    @media (max-width: 900px) {
+      .intro-block {
+        flex-direction: column !important; /* 强制垂直排列 */
+        text-align: center;
+        gap: 30px;
+      }
+      .intro-block img {
+        max-width: 100%;
+      }
+      .intro-text {
+        padding: 0 10px;
+      }
+      .hero h1 {
+        font-size: 48px;
+      }
+      .hero p {
+        font-size: 24px;
+      }
+    }
+    
+    /* 联系我们部分样式 */
+    .contact-section {
+      background: #111;
+      padding: 60px 20px;
+      text-align: center;
+      border-top: 1px solid #222;
+    }
+    .contact-section h2 {
+      font-size: 36px;
+      color: #00bfff;
+      margin-bottom: 30px;
+    }
+    .contact-info {
+      font-size: 20px;
+      line-height: 1.8;
+      color: #ccc;
+    }
+    .contact-info span {
+      margin: 0 15px;
+      display: inline-block;
+    }
+    .contact-info a {
+      color: #00bfff;
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .contact-info a:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">Air traffic control simulator &nbsp;&nbsp;&nbsp; Electronic checklist</div>
+    <nav>
+      <a href="#">主页</a>
+      <a href="#intro">空管模拟器介绍</a>
+      <a href="#checklist">电子检查单介绍</a>
+      <div class="dropdown">
+        <button class="dropdown-btn">软件下载</button>
+        <div class="dropdown-content">
+          <a href="#">电子检查单mac版</a>
+          <a href="#">电子检查单win版</a>
+        </div>
+      </div>
+      <a href="#">关于我们</a>
+      <a href="#contact">联系我们</a>
+    </nav>
+  </header>
+
+  
+  
+
+<style>
+  .radar-sweep {
+    position: absolute;
+    width: 800px;
+    height: 800px;
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 0;
+    pointer-events: none;
+  }
+  .radar-sweep .circle {
+    position: absolute;
+    border: 1px solid #00ffcc33;
+    border-radius: 50%;
+  }
+  .circle-1 {
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+  }
+  .circle-2 {
+    width: 66%;
+    height: 66%;
+    top: 17%;
+    left: 17%;
+  }
+  .circle-3 {
+    width: 33%;
+    height: 33%;
+    top: 33.5%;
+    left: 33.5%;
+  }
+  .sweep-line {
+    position: absolute;
+    width: 400px;
+    height: 2px;
+    background-color: #00ffcc88;
+    top: 50%;
+    left: 50%;
+    transform-origin: left;
+    animation: radarSweep 4s linear infinite;
+  }
+  @keyframes radarSweep {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
+</style>
+
+<section class="hero">
+  <div class="radar-sweep">
+    <div class="circle circle-1"></div>
+    <div class="circle circle-2"></div>
+    <div class="circle circle-3"></div>
+    <div class="sweep-line"></div>
+  </div>
+    <h1>欢迎使用空中交通管制模拟器</h1>
+    <p>沉浸式体验真实的空管指挥环境</p>
+    <button onclick="window.location.href='game.html'">进入游戏</button>
+  </section>
+
+  <section class="intro-section" id="intro">
+    <div class="intro-block">
+      <img src="/images/welcome.png" alt="欢迎页面截图">
+      <div class="intro-text">
+        <h2>空中交通管制模拟器</h2>
+        欢迎来到空中交通管制模拟器，这是一款具有挑战性和沉浸感的游戏，让你化身为空中交通管制员。你的任务是管理空域，确保空中交通的安全和高效流动。
+      </div>
+    </div>
+    <div class="intro-block">
+      <img src="/images/gameplay.png" alt="游戏玩法截图">
+      <div class="intro-text">
+        <h2>游戏玩法</h2>
+        鼠标拖拽指挥：使用鼠标拖拽的方式来指挥飞机的航向。
+        将等待起飞的飞机拖拽到跑道端口即可发出起飞指令；
+        将即将落地的飞机拖拽到跑道端口处即可发出落地指令。
+      </div>
+    </div>
+    <div class="intro-block">
+      <img src="/images/rules.png" alt="规则截图">
+      <div class="intro-text">
+        <h2>游戏规则</h2>
+        安全间隔：如飞机小于安全间隔，游戏将结束。<br>
+        管制区限制：飞机飞出管制区将导致游戏结束。<br>
+        地面等待：地面等待的飞机超过1分钟，游戏也会结束。
+      </div>
+    </div>
+    <div class="intro-block">
+      <img src="/images/features.png" alt="功能特点截图">
+      <div class="intro-text">
+        <h2>主要特点</h2>
+        互动控制：通过控制按钮来开始、暂停和结束游戏。<br>
+        速度管理：使用速度控制来减慢或加快游戏节奏。<br>
+        逼真的雷达界面：在详细的雷达屏幕上监控飞机移动。<br>
+        语音指令：未来将支持语音发出管制指令。<br>
+        通信记录：记录所有通信，确保信息不遗漏。
+      </div>
+    </div>
+  </section>
+
+  <section class="checklist-section" id="checklist">
+    <h2>电子检查单软件介绍</h2>
+    <div class="checklist-img">
+      <img src="/images/checklist1.png" alt="飞机电子检查单">
+      <img src="/images/checklist2.png" alt="程序员自律清单">
+    </div>
+    <div class="checklist-text">
+      <p><strong>专业规范·高效执行</strong><br>
+      《电子检查单》是一款融合了航空、医疗等特种行业标准执行规范的任务管理和检查软件。它将飞行员的严谨检查流程、医疗手术前的安全确认、工程施工的标准化管理等专业领域的最佳实践，转化为人人可用的高效工作管理工具。</p>
+
+      <p><strong>核心特色</strong><br>
+      • 标准化流程：借鉴飞行员起飞前检查单的严谨结构，将复杂任务转化为可执行的标准步骤<br>
+      • 强制执行机制：确保每个环节都经过确认，防止遗漏关键步骤<br>
+      • 灵活模板系统：内置多种行业模板，同时支持自定义创建，适应不同工作场景<br>
+      • 直观操作界面：简洁清晰的用户界面，降低使用门槛，提高执行效率</p>
+
+      <p><strong>适用场景</strong><br>
+      工作管理、时间规划、流程执行、安全检查</p>
+
+      <p><strong>为什么选择《电子检查单》</strong><br>
+      在当今快节奏的工作环境中，高效且无误的任务执行变得尤为重要。《电子检查单》通过将航空等高风险行业的标准化流程引入日常工作，帮助用户：<br>
+      - 减少执行偏差，提高工作质量<br>
+      - 降低认知负荷，专注核心任务<br>
+      - 建立可靠系统，形成高效习惯<br>
+      - 实现结构化思考，优化工作方法</p>
+
+      <p><strong>版本信息</strong><br>
+      电子检查单 V1.10 版</p>
+    </div>
+  </section>
+  
+  <!-- 联系我们部分 -->
+  <section class="contact-section" id="contact">
+    <h2>联系我们</h2>
+    <div class="contact-info">
+      <span>邮箱：<a href="mailto:351166690@qq.com">351166690@qq.com</a></span>
+      <span>QQ：351166690</span>
+    </div>
+  </section>
+
+  <footer>
+    &copy; 2025 空中交通管制模拟器     2025 电子检查单 | 由 HELLO BIG JIANG STUDIO 构想与开发
+  </footer>
+
 </html>
