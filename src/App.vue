@@ -1,11 +1,19 @@
 <template>
   <div id="app" @keydown="onKeyDown" @keyup="onKeyUp" tabindex="0">
+    <!-- 机场选择器 -->
+    <AirportSelector 
+      :show="showAirportSelector"
+      @airport-selected="onAirportSelected"
+      @cancel="onAirportSelectorCancel"
+    />
+    
     <div class="controls-container">
       <!-- 游戏控制按钮 -->
       <div class="game-controls">
         <button @click="startGame" :disabled="gameStatus === 'running'">Start</button>
         <button @click="pauseGame" :disabled="gameStatus !== 'running'">Pause</button>
         <button @click="endGame" :disabled="gameStatus === 'ended'">End</button>
+        <button @click="showAirportSelector = true" :disabled="gameStatus === 'running'">Change Airport</button>
         
         <!-- 添加难度选择下拉菜单 -->
         <div class="difficulty-select">
@@ -16,6 +24,11 @@
             <option value="advanced">Advanced</option>
             <option value="expert">Expert</option>
           </select>
+        </div>
+        
+        <!-- 显示当前机场信息 -->
+        <div class="current-airport" v-if="currentAirport">
+          <span>Airport: {{ currentAirport.displayName }}</span>
         </div>
       </div>
 
@@ -203,6 +216,13 @@ canvas {
   margin-left: 15px;
 }
 
+/* 当前机场信息样式 */
+.current-airport {
+  margin-left: 15px;
+  color: #00ffcc;
+  font-weight: bold;
+}
+
 /* 修改通话记录窗口样式，支持滚动，最新消息在顶部 */
 .comm-container {
   position: relative;
@@ -339,6 +359,8 @@ canvas {
 import airplaneImg from './assets/airplane.png';
 import { generateRandomFlightNumber } from './utils/flightUtils';
 import { radioEffects } from './sounds/radio_effects.js';
+import AirportSelector from './components/AirportSelector.vue';
+import { getAirportById, isPointInRestrictedArea } from './data/airports.js';
 
 // Adding constant for English mode
 const isEnglish = true; // English is now the only supported language
@@ -346,6 +368,9 @@ const isEnglish = true; // English is now the only supported language
 let flightCounter = 1000;
 
 export default {
+  components: {
+    AirportSelector
+  },
   data() {
     return {
       ctx: null,
@@ -369,6 +394,10 @@ export default {
         { x: 1700, y: 100, id: "NAV2" },
         { x: 100, y: 1100, id: "NAV3" }
       ],
+      // 多机场系统
+      showAirportSelector: true,
+      currentAirport: null,
+      currentAirportId: null,
       // 添加难度设置
       difficulty: 'intermediate', // 默认为中级难度
       // 不同难度对应的飞机生成时间间隔(毫秒)
@@ -504,12 +533,62 @@ export default {
   },
   
   methods: {
+    // 机场选择相关方法
+    onAirportSelected(airportId) {
+      this.currentAirportId = airportId;
+      this.currentAirport = getAirportById(airportId);
+      this.showAirportSelector = false;
+      
+      // 重置游戏状态
+      this.resetGameForNewAirport();
+      
+      this.addToCommunicationLog(`Selected airport: ${this.currentAirport.displayName}`);
+    },
+    
+    onAirportSelectorCancel() {
+      if (!this.currentAirport) {
+        // 如果没有选择机场，强制选择默认机场
+        this.onAirportSelected('CAN'); // 默认选择广州机场
+      } else {
+        this.showAirportSelector = false;
+      }
+    },
+    
+    resetGameForNewAirport() {
+      // 停止当前游戏
+      this.endGame();
+      
+      // 清空飞机
+      this.airplanes = [];
+      this.incomingAircraft = [];
+      
+      // 重置游戏状态
+      this.gameStatus = 'start';
+      this.score = 0;
+      
+      // 清空通信日志
+      this.communicationLog = ['', '', '', ''];
+      this.allCommunicationLog = ['', '', '', ''];
+      
+      // 根据机场难度调整游戏难度
+      if (this.currentAirport && this.currentAirport.difficulty) {
+        this.difficulty = this.currentAirport.difficulty;
+      }
+    },
+    
     // 根据ID查找飞机
     getPlaneById(planeId) {
       return this.airplanes.find(p => p.id === planeId);
     },
     
     startGame() {
+      // 检查是否已选择机场
+      if (!this.currentAirport) {
+        this.showAirportSelector = true;
+        this.addToCommunicationLog("Please select an airport first");
+        return;
+      }
+      
       // 如果游戏当前是暂停状态，则继续游戏而不是重新开始
       if (this.gameStatus === 'paused') {
         // 恢复游戏状态
@@ -906,7 +985,7 @@ export default {
     },
     
     spawnApproach() {
-      if (this.gameStatus !== 'running') return;
+      if (this.gameStatus !== 'running' || !this.currentAirport) return;
       
       // 检查是否已达到当前难度的最大飞机数量限制
       if (this.currentAircraftCount >= this.dynamicMaxAircraftCount) {
@@ -918,20 +997,14 @@ export default {
       const flightNumber = generateRandomFlightNumber();
       const id = "B" + flightNumber;
       
-      // 定义雷达屏幕的绝对边缘位置
-      const edgePoints = [
-        { x: 0, y: Math.random() * 1200, position: "left" },          // 左边缘
-        { x: 1800, y: Math.random() * 1200, position: "right" },       // 右边缘
-        { x: Math.random() * 1800, y: 0, position: "top" },          // 上边缘
-        { x: Math.random() * 1800, y: 1200, position: "bottom" }        // 下边缘
-      ];
+      // 使用当前机场的生成点
+      const spawnPoints = this.currentAirport.spawnPoints;
+      const entry = spawnPoints[Math.floor(Math.random() * spawnPoints.length)];
       
-      // 随机选择一个边缘点
-      const entry = edgePoints[Math.floor(Math.random() * edgePoints.length)];
-      
-      // 计算朝向屏幕中心的航向
-      const dx = 900 - entry.x;
-      const dy = 600 - entry.y;
+      // 计算朝向机场中心的航向
+      const center = this.currentAirport.center;
+      const dx = center.x - entry.x;
+      const dy = center.y - entry.y;
       const angle = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
       
       // 根据边缘位置确定倒计时的方向和数字
@@ -1430,20 +1503,11 @@ export default {
         ctx.fillRect(0, 0, 1800, 1200);
       }
 
-      // 调整跑道位置到新的中心点 (900, 600)
-      ctx.fillStyle = "#444";
-      ctx.fillRect(800, 450, 60, 300); // 左跑道
-      ctx.fillRect(940, 450, 60, 300); // 右跑道
-
-      // 调整跑道标识位置
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 16px monospace";
-      // 北端（顶部）是 18（朝南）
-      ctx.fillText("18R", 810, 445); // 左跑道顶部
-      ctx.fillText("18L", 950, 445); // 右跑道顶部
-      // 南端（底部）是 36（朝北）
-      ctx.fillText("36L", 810, 770); // 左跑道底部
-      ctx.fillText("36R", 950, 770); // 右跑道底部
+      // 绘制当前机场的跑道和限制区
+      if (this.currentAirport) {
+        this.drawAirportRunways(ctx);
+        this.drawRestrictedAreas(ctx);
+      }
 
       // 绘制雷达环
       ctx.strokeStyle = "#004433";
@@ -2320,6 +2384,87 @@ export default {
       }
     },
     // 绘制导航台方法
+    drawAirportRunways(ctx) {
+      if (!this.currentAirport || !this.currentAirport.runways) return;
+      
+      // 绘制跑道
+      for (const runway of this.currentAirport.runways) {
+        if (!runway.active) continue;
+        
+        // 计算跑道的位置和尺寸
+        const runwayLength = runway.length / 10; // 缩放跑道长度
+        const runwayWidth = runway.width;
+        const centerX = runway.x;
+        const centerY = runway.y;
+        
+        // 根据跑道方向计算旋转角度
+        const heading = runway.heading;
+        const rotationAngle = (heading - 90) * Math.PI / 180; // 转换为弧度
+        
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.rotate(rotationAngle);
+        
+        // 绘制跑道主体
+        ctx.fillStyle = "#444";
+        ctx.fillRect(-runwayWidth/2, -runwayLength/2, runwayWidth, runwayLength);
+        
+        // 绘制跑道边线
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-runwayWidth/2, -runwayLength/2, runwayWidth, runwayLength);
+        
+        // 绘制跑道中心线
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([10, 10]);
+        ctx.beginPath();
+        ctx.moveTo(0, -runwayLength/2);
+        ctx.lineTo(0, runwayLength/2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        
+        // 绘制跑道标识
+        ctx.fillStyle = "#fff";
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        
+        // 跑道两端标识
+        const endOffset = runwayLength/2 + 20;
+        ctx.fillText(runway.name.split('/')[0], 0, -endOffset); // 北端
+        ctx.fillText(runway.name.split('/')[1], 0, endOffset);  // 南端
+        
+        ctx.restore();
+      }
+    },
+    
+    drawRestrictedAreas(ctx) {
+      if (!this.currentAirport || !this.currentAirport.restrictedAreas) return;
+      
+      // 绘制限制区
+      for (const area of this.currentAirport.restrictedAreas) {
+        const { bounds, color } = area;
+        
+        // 绘制限制区背景
+        ctx.fillStyle = color + '40'; // 添加透明度
+        ctx.fillRect(bounds.x1, bounds.y1, bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
+        
+        // 绘制限制区边框
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(bounds.x1, bounds.y1, bounds.x2 - bounds.x1, bounds.y2 - bounds.y1);
+        
+        // 绘制限制区标识
+        ctx.fillStyle = color;
+        ctx.font = "bold 12px monospace";
+        ctx.textAlign = "center";
+        const centerX = (bounds.x1 + bounds.x2) / 2;
+        const centerY = (bounds.y1 + bounds.y2) / 2;
+        ctx.fillText(area.name, centerX, centerY);
+        ctx.textAlign = "start";
+      }
+    },
+    
     drawNavBeacons(ctx) {
       // 使用与雷达界面相同的蓝色
       ctx.fillStyle = "#00ffcc";
@@ -4456,7 +4601,50 @@ export default {
         }
       }
       
+      // 检查飞机是否进入限制区
+      this.checkRestrictedAreaViolations();
+      
       return false;
+    },
+    
+    // 检查飞机是否进入限制区
+    checkRestrictedAreaViolations() {
+      if (!this.currentAirport || !this.currentAirport.restrictedAreas) return;
+      
+      // 获取所有飞行中的飞机
+      const flyingPlanes = this.airplanes.filter(plane => 
+        plane.state === "FLYING" || 
+        plane.state === "APPROACH" || 
+        plane.state === "FINAL_APPROACH" ||
+        plane.state === "TAKEOFF" ||
+        plane.state === "LANDING"
+      );
+      
+      for (const plane of flyingPlanes) {
+        // 跳过已标记为问题飞机的飞机
+        if (this.problemAircraft.includes(plane) || this.problemAircraft.includes(plane.id)) continue;
+        
+        // 检查飞机是否在限制区内
+        const restrictedArea = isPointInRestrictedArea(
+          this.currentAirportId, 
+          plane.x, 
+          plane.y, 
+          plane.altitude || 1000 // 默认高度1000米
+        );
+        
+        if (restrictedArea) {
+          console.log(`检测到限制区违规: ${plane.id} 进入 ${restrictedArea.name}`);
+          
+          // 标记问题飞机并触发游戏结束
+          this.problemAircraft = [plane];
+          
+          this.triggerGameOver(
+            "RESTRICTED_AREA", 
+            `RESTRICTED AREA VIOLATION: ${plane.id} entered ${restrictedArea.name}`
+          );
+          return;
+        }
+      }
     },
     
     // 添加辅助函数获取位置描述
@@ -4587,6 +4775,10 @@ export default {
         case "GROUND_DELAY":
           // 地面延误警告音
           this.speak("Ground delay timeout!");
+          break;
+        case "RESTRICTED_AREA":
+          // 限制区违规警告音
+          this.speak("Restricted area violation!");
           break;
       }
     },
