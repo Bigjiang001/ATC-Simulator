@@ -156,6 +156,12 @@ class AirTrafficRadioEffects {
       utterance.lang = options.lang || "en-US";
       utterance.pitch = options.pitch || 1;
       utterance.rate = options.rate || 1;
+      
+      // 设置语音（如果提供）
+      if (options.voice) {
+        utterance.voice = options.voice;
+      }
+      
       window.speechSynthesis.speak(utterance);
       return new Promise((resolve) => {
         utterance.onend = resolve;
@@ -168,6 +174,11 @@ class AirTrafficRadioEffects {
       utterance.lang = options.lang || "en-US";
       utterance.pitch = options.pitch || 1;
       utterance.rate = options.rate || 1;
+      
+      // 设置语音（如果提供）
+      if (options.voice) {
+        utterance.voice = options.voice;
+      }
       
       // 取消任何正在进行的语音
       window.speechSynthesis.cancel();
@@ -196,6 +207,12 @@ class AirTrafficRadioEffects {
       utterance.lang = options.lang || "en-US";
       utterance.pitch = options.pitch || 1;
       utterance.rate = options.rate || 1;
+      
+      // 设置语音（如果提供）
+      if (options.voice) {
+        utterance.voice = options.voice;
+      }
+      
       window.speechSynthesis.speak(utterance);
       
       return Promise.resolve();

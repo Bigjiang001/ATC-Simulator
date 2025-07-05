@@ -777,21 +777,68 @@ export default {
       
       console.log(`Speech: ${voiceCommand}`);
       
+      // 获取可用的语音列表并选择最佳语音
+      const getBestVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        
+        // 优先选择英语语音，按优先级排序
+        const preferredVoices = [
+          'Google US English', // Chrome默认
+          'Alex', // macOS默认
+          'Samantha', // macOS女性语音
+          'Daniel', // macOS男性语音
+          'Microsoft David - English (United States)', // Windows默认
+          'Microsoft Zira - English (United States)' // Windows女性语音
+        ];
+        
+        // 首先尝试找到优先语音
+        for (const preferredVoice of preferredVoices) {
+          const voice = voices.find(v => v.name.includes(preferredVoice));
+          if (voice) {
+            console.log(`使用优先语音: ${voice.name}`);
+            return voice;
+          }
+        }
+        
+        // 如果没有找到优先语音，选择第一个英语语音
+        const englishVoice = voices.find(v => v.lang.startsWith('en-'));
+        if (englishVoice) {
+          console.log(`使用英语语音: ${englishVoice.name}`);
+          return englishVoice;
+        }
+        
+        // 最后回退到第一个可用语音
+        if (voices.length > 0) {
+          console.log(`使用默认语音: ${voices[0].name}`);
+          return voices[0];
+        }
+        
+        return null;
+      };
+      
       // 使用塔台无线电效果播放语音
       try {
         // 尝试使用无线电效果
         radioEffects.applyRadioEffectToSpeech(voiceCommand, {
           lang: "en-US",
           pitch: 1,
-          rate: 1
+          rate: 1,
+          voice: getBestVoice()
         }).catch(err => {
           // 如果无线电效果失败，回退到普通语音
           console.error("Radio effect failed, falling back to regular speech:", err);
           const utterance = new SpeechSynthesisUtterance(voiceCommand);
-      utterance.lang = "en-US";
-      utterance.pitch = 1;
-      utterance.rate = 1;
-      speechSynthesis.speak(utterance);
+          utterance.lang = "en-US";
+          utterance.pitch = 1;
+          utterance.rate = 1;
+          
+          // 设置语音
+          const voice = getBestVoice();
+          if (voice) {
+            utterance.voice = voice;
+          }
+          
+          speechSynthesis.speak(utterance);
         });
       } catch (e) {
         // 备用方案：使用普通语音合成
@@ -800,6 +847,13 @@ export default {
         utterance.lang = "en-US";
         utterance.pitch = 1;
         utterance.rate = 1;
+        
+        // 设置语音
+        const voice = getBestVoice();
+        if (voice) {
+          utterance.voice = voice;
+        }
+        
         speechSynthesis.speak(utterance);
       }
       
