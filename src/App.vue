@@ -816,15 +816,45 @@ export default {
         return null;
       };
       
-      // 使用塔台无线电效果播放语音
-      try {
-        // 尝试使用无线电效果
-        radioEffects.applyRadioEffectToSpeech(voiceCommand, {
-          lang: "en-US",
-          pitch: 1,
-          rate: 1,
-          voice: getBestVoice()
-        }).catch(err => {
+      // 等待语音加载完成的函数
+      const waitForVoices = () => {
+        return new Promise((resolve) => {
+          const voices = window.speechSynthesis.getVoices();
+          
+          if (voices.length > 0) {
+            resolve(getBestVoice());
+          } else {
+            // 如果语音列表为空，等待语音加载
+            const onVoicesChanged = () => {
+              window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+              resolve(getBestVoice());
+            };
+            
+            window.speechSynthesis.addEventListener('voiceschanged', onVoicesChanged);
+            
+            // 设置超时，避免无限等待
+            setTimeout(() => {
+              window.speechSynthesis.removeEventListener('voiceschanged', onVoicesChanged);
+              resolve(null);
+            }, 2000);
+          }
+        });
+      };
+      
+      // 使用异步函数处理语音合成
+      const speakWithVoice = async () => {
+        const voice = await waitForVoices();
+        
+        // 使用塔台无线电效果播放语音
+        try {
+          // 尝试使用无线电效果
+          await radioEffects.applyRadioEffectToSpeech(voiceCommand, {
+            lang: "en-US",
+            pitch: 1,
+            rate: 1,
+            voice: voice
+          });
+        } catch (err) {
           // 如果无线电效果失败，回退到普通语音
           console.error("Radio effect failed, falling back to regular speech:", err);
           const utterance = new SpeechSynthesisUtterance(voiceCommand);
@@ -833,14 +863,16 @@ export default {
           utterance.rate = 1;
           
           // 设置语音
-          const voice = getBestVoice();
           if (voice) {
             utterance.voice = voice;
           }
           
           speechSynthesis.speak(utterance);
-        });
-      } catch (e) {
+        }
+      };
+      
+      // 执行语音合成
+      speakWithVoice().catch(e => {
         // 备用方案：使用普通语音合成
         console.error("Failed to apply radio effect:", e);
         const utterance = new SpeechSynthesisUtterance(voiceCommand);
@@ -848,14 +880,8 @@ export default {
         utterance.pitch = 1;
         utterance.rate = 1;
         
-        // 设置语音
-        const voice = getBestVoice();
-        if (voice) {
-          utterance.voice = voice;
-        }
-        
         speechSynthesis.speak(utterance);
-      }
+      });
       
       if (addToLog) {
         this.addToCommunicationLog(text);
