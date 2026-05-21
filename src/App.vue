@@ -1270,14 +1270,14 @@ export default {
                 }
               }
               
-              // 检查飞机是否已离开雷达范围
-              if (plane.x < -100 || plane.x > 1900 || plane.y < -100 || plane.y > 1300) {
+              // 离场飞机离开雷达边界属于正常移交/离场流程，不应触发游戏失败
+              if (!toRemove.includes(plane) && this.isAircraftOutsideRadarBounds(plane)) {
                 this.addToCommunicationLog(`${plane.id} has exited radar coverage`);
-            toRemove.push(plane);
+                toRemove.push(plane);
                 
                 // 允许立即生成新飞机，不仅限于初级难度
                 this.canSpawnNewAircraft = true;
-          }
+              }
         }
           } catch (planeError) {
             // 单个飞机更新出错，记录但继续处理其他飞机
@@ -4448,27 +4448,33 @@ export default {
       }
     },
     
+    // 判断飞机是否超出雷达边界
+    isAircraftOutsideRadarBounds(plane) {
+      return (
+        plane.x < this.radarBounds.minX ||
+        plane.x > this.radarBounds.maxX ||
+        plane.y < this.radarBounds.minY ||
+        plane.y > this.radarBounds.maxY
+      );
+    },
+
     // 检查飞机是否飞出边界
     checkAircraftOutOfBounds() {
       // 如果游戏已结束，不再检测
       if (this.isGameOver) return;
       
-      // 获取所有飞行中的飞机（包括起飞和着陆的飞机）
-      const flyingPlanes = this.airplanes.filter(plane => 
+      // 只把需要继续管制的空中目标纳入越界失败判定。
+      // TAKEOFF 是离场航班，离开管制空域属于正常流程，不能触发游戏失败。
+      const controlledPlanes = this.airplanes.filter(plane => 
         plane.state === "FLYING" || 
         plane.state === "APPROACH" || 
         plane.state === "FINAL_APPROACH" ||
-        plane.state === "TAKEOFF" ||
         plane.state === "LANDING"
       );
       
-      for (const plane of flyingPlanes) {
+      for (const plane of controlledPlanes) {
         // 检查飞机是否超出雷达边界
-        if (plane.x < this.radarBounds.minX || 
-            plane.x > this.radarBounds.maxX || 
-            plane.y < this.radarBounds.minY || 
-            plane.y > this.radarBounds.maxY) {
-          
+        if (this.isAircraftOutsideRadarBounds(plane)) {
           this.problemAircraft = [plane];
           this.triggerGameOver(
             "OUT_OF_BOUNDS", 
