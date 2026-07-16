@@ -1,6 +1,10 @@
 <template>
-  <div id="app" @keydown="onKeyDown" @keyup="onKeyUp" tabindex="0">
+  <div id="app" tabindex="0">
     <div class="controls-container">
+      <div class="sector-title">
+        <span class="scope-name">{{ airport.name }}</span>
+        <span class="scope-subtitle">{{ airport.subtitle }}</span>
+      </div>
       <!-- 游戏控制按钮 -->
       <div class="game-controls">
         <button @click="startGame" :disabled="gameStatus === 'running'">Start</button>
@@ -17,21 +21,26 @@
             <option value="expert">Expert</option>
           </select>
         </div>
+
+        <div class="airport-select">
+          <span>Airport:</span>
+          <select v-model="selectedAirportId" :disabled="gameStatus === 'running'" @change="changeAirport">
+            <option v-for="option in airports" :key="option.id" :value="option.id">
+              {{ option.name }}
+            </option>
+          </select>
+        </div>
       </div>
 
       <!-- 速度控制 -->
       <div class="speed-control">
-        <span>Speed Level:</span>
-        <button @click="decreaseSpeed" :class="{ active: speedLevel < 1 }">
-          ←
-        </button>
-        <button @click="resetSpeed" :class="{ active: speedLevel === 1 }">
-          Standard
-        </button>
-        <button @click="increaseSpeed" :class="{ active: speedLevel > 1 }">
-          →
-        </button>
-        <span class="speed-display">{{ speedLevel.toFixed(2) }}x</span>
+        <span>Simulation:</span>
+        <div class="speed-segments" role="group" aria-label="Simulation speed">
+          <button @click="setSpeedLevel(0.5)" :class="{ active: speedLevel === 0.5 }">0.5x</button>
+          <button @click="setSpeedLevel(1)" :class="{ active: speedLevel === 1 }">1x</button>
+          <button @click="setSpeedLevel(1.5)" :class="{ active: speedLevel === 1.5 }">1.5x</button>
+          <button @click="setSpeedLevel(2)" :class="{ active: speedLevel === 2 }">2x</button>
+        </div>
       </div>
     </div>
 
@@ -39,7 +48,16 @@
       <!-- 雷达屏幕 -->
     <canvas
       ref="radarCanvas"
-        width="1800"
+      data-testid="radar-canvas"
+      :data-airport-id="airport.id"
+      :data-game-status="gameStatus"
+      :data-score="score"
+      :data-last-touchdown-altitude="lastTouchdownAltitude ?? ''"
+      :data-game-over="isGameOver"
+      :data-game-over-reason="gameOverReason"
+      :data-aircraft-state="aircraftTestState"
+      :data-speech-voice="preferredSpeechVoiceName"
+      width="1800"
         height="1200"
       @mousedown="startDrag"
       @mousemove="onDrag"
@@ -56,7 +74,10 @@
         
         <!-- 添加语音通话按钮 -->
         <div class="voice-command-container">
-          <div v-if="voiceCommandText" class="recognized-text">{{ voiceCommandText }}</div>
+          <div class="voice-panel">
+            <div class="voice-status">{{ voiceStatusText }}</div>
+            <div v-if="voiceCommandText" class="recognized-text">{{ voiceCommandText }}</div>
+          </div>
           <button 
             @mousedown="startVoiceCommand" 
             @mouseup="stopVoiceCommand"
@@ -76,24 +97,52 @@
 <style>
 body {
   margin: 0;
-  background-color: #000;
-  color: #00ffcc;
-  font-family: monospace;
+  background:
+    radial-gradient(circle at 50% 45%, rgba(27, 109, 97, 0.2), transparent 36%),
+    linear-gradient(135deg, #020607 0%, #071113 45%, #030708 100%);
+  color: #8fffe6;
+  font-family: "SFMono-Regular", "Cascadia Mono", "Roboto Mono", monospace;
 }
 #app {
   position: relative;
-  padding: 10px;
+  min-height: 100vh;
+  padding: 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
+  box-sizing: border-box;
 }
 .controls-container {
   width: 100%;
   max-width: 1800px;
   display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
   justify-content: space-between;
+  align-items: center;
   margin-bottom: 10px;
-  padding: 10px 0;
+  padding: 10px 12px;
+  background: rgba(3, 22, 24, 0.82);
+  border: 1px solid rgba(0, 255, 204, 0.38);
+  box-shadow: 0 0 24px rgba(0, 255, 204, 0.08), inset 0 0 28px rgba(0, 255, 204, 0.05);
+  box-sizing: border-box;
+}
+.sector-title {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 300px;
+  min-width: 240px;
+  text-transform: uppercase;
+}
+.scope-name {
+  color: #e7fff8;
+  font-size: 18px;
+  font-weight: 700;
+}
+.scope-subtitle {
+  color: rgba(143, 255, 230, 0.64);
+  font-size: 12px;
+  letter-spacing: 0;
 }
 .radar-container {
   position: relative;
@@ -101,7 +150,12 @@ body {
   max-width: 1800px;
 }
 canvas {
-  border: 2px solid #00ffcc;
+  border: 1px solid rgba(0, 255, 204, 0.56);
+  background: #061212;
+  box-shadow:
+    0 0 0 1px rgba(188, 255, 238, 0.08),
+    0 20px 80px rgba(0, 0, 0, 0.45),
+    inset 0 0 80px rgba(0, 255, 204, 0.06);
   display: block;
   max-width: 100%;
   height: auto;
@@ -120,51 +174,62 @@ canvas {
   z-index: 10;
 }
 .speed-control {
-  color: #00ffcc;
+  color: #8fffe6;
   z-index: 10;
   display: flex;
   align-items: center;
+  flex: 0 1 auto;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .speed-control span {
-  margin-right: 10px;
+  margin-right: 4px;
+}
+.speed-segments {
+  display: grid;
+  grid-template-columns: repeat(4, 48px);
+  border: 1px solid rgba(0, 255, 204, 0.45);
+  border-radius: 3px;
+  overflow: hidden;
 }
 .speed-control button {
-  margin-left: 5px;
-  background: none;
-  border: 1px solid #00ffcc;
-  color: #00ffcc;
-  padding: 4px 8px;
+  margin: 0;
+  background: rgba(0, 32, 34, 0.9);
+  border: 0;
+  border-right: 1px solid rgba(0, 255, 204, 0.28);
+  color: #8fffe6;
+  padding: 5px 6px;
   cursor: pointer;
-  min-width: 30px;
+  width: 48px;
 }
-.speed-control button:nth-child(2),
-.speed-control button:nth-child(4) {
-  min-width: 20px;
-}
-.speed-control button:nth-child(3) {
-  min-width: 80px;
+.speed-control button:last-child {
+  border-right: 0;
 }
 .speed-control button.active {
-  background-color: #00ffcc;
-  color: #000;
+  background-color: #8fffe6;
+  color: #031112;
 }
 /* 游戏控制按钮样式 */
 .game-controls {
   z-index: 10;
   display: flex;
+  flex: 1 1 560px;
+  flex-wrap: wrap;
   gap: 10px;
   align-items: center;
 }
 .game-controls button {
-  background: none;
-  border: 1px solid #00ffcc;
-  color: #00ffcc;
+  background: linear-gradient(180deg, rgba(13, 48, 49, 0.95), rgba(2, 19, 21, 0.95));
+  border: 1px solid rgba(0, 255, 204, 0.48);
+  color: #d9fff7;
   padding: 6px 12px;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
 }
 .game-controls button:hover {
-  background-color: rgba(0, 255, 204, 0.2);
+  background-color: rgba(0, 255, 204, 0.18);
+  box-shadow: 0 0 16px rgba(0, 255, 204, 0.16);
 }
 .game-controls button:disabled {
   opacity: 0.5;
@@ -172,28 +237,29 @@ canvas {
 }
 
 /* 添加难度选择下拉菜单样式 */
-.difficulty-select, .language-select {
+.difficulty-select, .language-select, .airport-select {
   display: flex;
   align-items: center;
   gap: 5px;
-  color: #00ffcc;
+  color: #8fffe6;
 }
 
-.difficulty-select select, .language-select select {
-  background-color: #001010;
-  color: #00ffcc;
-  border: 1px solid #00ffcc;
-  border-radius: 4px;
+.difficulty-select select, .language-select select, .airport-select select {
+  background-color: #031719;
+  color: #d9fff7;
+  border: 1px solid rgba(0, 255, 204, 0.5);
+  border-radius: 3px;
   padding: 5px;
   cursor: pointer;
+  max-width: 260px;
 }
 
-.difficulty-select select:disabled, .language-select select:disabled {
+.difficulty-select select:disabled, .language-select select:disabled, .airport-select select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
-.difficulty-select select option, .language-select select option {
+.difficulty-select select option, .language-select select option, .airport-select select option {
   background-color: #001010;
   color: #00ffcc;
 }
@@ -215,11 +281,11 @@ canvas {
 .communication-log {
   position: relative;
   width: 100%; /* 恢复原来的窗口大小 */
-  background-color: rgba(0, 16, 16, 0.8);
-  border: 1px solid #00ffcc;
-  border-radius: 8px;
+  background-color: rgba(2, 17, 19, 0.88);
+  border: 1px solid rgba(0, 255, 204, 0.42);
+  border-radius: 4px;
   padding: 10px;
-  color: #00ffcc;
+  color: #bfffee;
   max-height: 120px;
   overflow-y: auto;
   z-index: 20;
@@ -244,19 +310,20 @@ canvas {
   right: 20px;
   display: flex;
   align-items: center;
+  gap: 10px;
   z-index: 30;
 }
 
 .voice-command-button {
-  background-color: #003333;
-  border: 2px solid #00ffcc;
-  color: #00ffcc;
+  background-color: #062c2d;
+  border: 2px solid rgba(0, 255, 204, 0.75);
+  color: #e7fff8;
   padding: 8px 16px;
   font-size: 14px;
   font-weight: bold;
-  width: 60px;
+  width: 66px;
   height: 40px;
-  border-radius: 0px; /* Make button square instead of round */
+  border-radius: 3px;
   cursor: pointer;
   outline: none;
   transition: all 0.3s;
@@ -266,12 +333,13 @@ canvas {
 }
 
 .voice-command-button:hover {
-  background-color: #004444;
+  background-color: #075254;
 }
 
 .voice-command-button.active {
-  background-color: #00ffcc;
-  color: #003333;
+  background-color: #ff4747;
+  border-color: #ffb1b1;
+  color: #fff;
   transform: scale(1.1);
 }
 
@@ -285,14 +353,30 @@ canvas {
 }
 
 .recognized-text {
-  color: #00ffcc;
+  color: #e7fff8;
   max-width: 300px; /* 增加最大宽度，防止文本显示不完整 */
-  margin-right: 15px;
   white-space: normal; /* 允许文本换行 */
   overflow: visible; /* 不裁剪溢出的内容 */
   text-overflow: initial; /* 不使用省略号 */
   text-align: left; /* 文本左对齐 */
   word-wrap: break-word; /* 允许长单词换行 */
+}
+
+.voice-panel {
+  min-width: 260px;
+  max-width: 380px;
+  padding: 8px 10px;
+  background: rgba(0, 10, 12, 0.84);
+  border: 1px solid rgba(0, 255, 204, 0.35);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.voice-status {
+  color: rgba(143, 255, 230, 0.68);
+  font-size: 11px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
 }
 
 @keyframes blink {
@@ -325,20 +409,46 @@ canvas {
   opacity: 0.7;
 }
 
-.speed-display {
-  margin-left: 10px;
-  font-size: 14px;
-  min-width: 50px;
-  text-align: center;
-  padding: 2px 5px;
-  background-color: rgba(0, 255, 204, 0.1);
-  border-radius: 4px;
+@media (max-width: 980px) {
+  .controls-container {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .game-controls,
+  .speed-control {
+    flex-wrap: wrap;
+  }
+
+  .voice-command-container {
+    position: relative;
+    right: auto;
+    bottom: auto;
+    margin-top: 10px;
+    justify-content: flex-end;
+  }
 }
 </style>
 <script>
 import airplaneImg from './assets/airplane.png';
 import { generateRandomFlightNumber } from './utils/flightUtils';
+import {
+  getFinalApproachDistance,
+  getLandingRollTargetDistance,
+  getMovementDistance,
+  getNextAltitude,
+  getNextValue,
+  getRequiredVerticalRate,
+  getTurnStep,
+  isAircraftConflict,
+  isPointInPolygon,
+  shouldRemoveLandedAircraft,
+  updateLandingRollProgress,
+} from './utils/gameRules.js';
+import { extractAltitude, extractBeaconId, extractHeading, extractProcedureId, extractRunwayId, normalizeVoiceCommand } from './utils/voiceCommandParser.js';
+import { selectOriginalYoungSpeechVoice, selectPreferredSpeechVoice } from './utils/speechVoice.js';
 import { radioEffects } from './sounds/radio_effects.js';
+import { AIRPORTS, DEFAULT_AIRPORT } from './data/airports.js';
 
 // Adding constant for English mode
 const isEnglish = true; // English is now the only supported language
@@ -359,16 +469,24 @@ export default {
       communicationLog: ['', '', '', ''],
       allCommunicationLog: ['', '', '', ''],
       gameStatus: 'start',
+      testScenario: import.meta.env.DEV ? (new URLSearchParams(window.location.search).get('test') || '') : '',
+      testMode: import.meta.env.DEV && new URLSearchParams(window.location.search).has('test'),
+      testAircraftSpawned: false,
       gameLoopId: null,
+      lastRenderTime: 0,
       spawnApproachInterval: null,
       spawnDepartureInterval: null,
       score: 0,
+      lastTouchdownAltitude: null,
       takeoffSpeed: 0.2, // 起飞速度，与进场飞机保持一致
-      navBeacons: [
-        { x: 100, y: 200, id: "NAV1" },
-        { x: 1700, y: 100, id: "NAV2" },
-        { x: 100, y: 1100, id: "NAV3" }
-      ],
+      airports: AIRPORTS,
+      selectedAirportId: DEFAULT_AIRPORT.id,
+      airport: DEFAULT_AIRPORT,
+      runways: DEFAULT_AIRPORT.runways,
+      navBeacons: DEFAULT_AIRPORT.navBeacons,
+      restrictedAreas: DEFAULT_AIRPORT.restrictedAreas,
+      departureProcedures: DEFAULT_AIRPORT.departureProcedures,
+      sweepAngle: 0,
       // 添加难度设置
       difficulty: 'intermediate', // 默认为中级难度
       // 不同难度对应的飞机生成时间间隔(毫秒)
@@ -426,6 +544,7 @@ export default {
       recognition: null,
       isRecording: false,
       voiceCommandText: '',
+      pendingVoiceCommandText: '',
       lastVoiceCommandTime: 0,
       spacePressHandled: false, // 跟踪空格键是否已被处理
       
@@ -434,6 +553,15 @@ export default {
       isLoading: true,
       nextLogId: 1,
       voiceRecognitionTimeout: null, // 用于防止重复启动语音识别
+      voiceClearTimeout: null,
+      voiceRestartTimeout: null,
+      voiceCommitTimeout: null,
+      voiceHasFinalResult: false,
+      voiceStopRequested: false,
+      voiceSessionId: 0,
+      voiceStatusText: 'Hold left Shift to transmit',
+      speechRequestId: 0,
+      preferredSpeechVoiceName: '',
       lastVoiceCommandProcessTime: 0, // 用于命令频率限制
       continuousMode: false, // Store whether we're in continuous mode
       gameProgressInterval: null, // 游戏进度更新定时器
@@ -448,6 +576,15 @@ export default {
       isBlinking: false, // 当前是否在闪烁状态
       groundWaitingStartTimes: {}, // 记录飞机开始在地面等待的时间，格式: {planeId: timestamp}
       safetyDistance: 50, // 飞机安全距离，小于此距离视为碰撞
+      hardCollisionDistance: 22,
+      verticalSafetyDistance: 1000,
+      altitudeChangeRate: 900, // feet per minute
+      takeoffAltitudeChangeRate: 1500, // feet per minute
+      approachAltitudeChangeRate: 1000, // feet per minute
+      finalApproachAltitudeChangeRate: 800, // feet per minute
+      touchdownCaptureDistance: 20,
+      takeoffRotationSpeed: 140,
+      missedApproachAltitude: 3000,
       groundWaitTimeout: 60000, // 地面等待超时时间（60秒）
       radarBounds: { // 雷达边界，超出此范围视为飞出雷达范围
         minX: -50, 
@@ -477,8 +614,26 @@ export default {
     currentAircraftCount() {
       return this.airplanes.length;
     },
+    aircraftTestState() {
+      return JSON.stringify(this.airplanes.map(plane => ({
+        id: plane.id,
+        x: Math.round(plane.x * 10) / 10,
+        y: Math.round(plane.y * 10) / 10,
+        heading: Math.round(plane.heading),
+        targetHeading: Math.round(plane.targetHeading),
+        altitude: Math.round(plane.altitude || 0),
+        airspeed: Math.round(plane.indicatedSpeed || 0),
+        speed: Math.round((plane.speed || 0) * 1000) / 1000,
+        state: plane.state,
+        runway: plane.runway || plane.landingRunway || null,
+      })));
+    },
   },
   mounted() {
+    if (import.meta.env.DEV) {
+      window.__ATC_DEBUG_APP__ = this;
+    }
+
     const canvas = this.$refs.radarCanvas;
     this.ctx = canvas.getContext("2d");
     this.airplaneImage = new Image();
@@ -489,24 +644,83 @@ export default {
     
     // 初始化语音识别
     this.initSpeechRecognition();
+    this.ensurePreferredSpeechVoice();
     
-    // 添加键盘事件监听器
-    this.$el.focus(); // 确保元素可以接收键盘事件
-    
-    // 初始化语音识别
-    this.initSpeechRecognition();
+    window.addEventListener('keydown', this.handleGlobalKeyDown);
+    window.addEventListener('keyup', this.handleGlobalKeyUp);
+    this.$el.focus();
   },
   
-  beforeDestroy() {
-    // 移除键盘事件监听器
-    window.removeEventListener('keydown', this.handleKeyDown);
-    window.removeEventListener('keyup', this.handleKeyUp);
+  beforeUnmount() {
+    if (import.meta.env.DEV && window.__ATC_DEBUG_APP__ === this) {
+      delete window.__ATC_DEBUG_APP__;
+    }
+
+    window.removeEventListener('keydown', this.handleGlobalKeyDown);
+    window.removeEventListener('keyup', this.handleGlobalKeyUp);
+    this.stopVoiceCommand();
+    this.cleanupSpeechRecognition();
+    this.disposeSpeechVoiceLoader();
+    if (this.voiceClearTimeout) {
+      clearTimeout(this.voiceClearTimeout);
+    }
+    if (this.voiceRestartTimeout) {
+      clearTimeout(this.voiceRestartTimeout);
+    }
   },
   
   methods: {
     // 根据ID查找飞机
     getPlaneById(planeId) {
       return this.airplanes.find(p => p.id === planeId);
+    },
+
+    selectPlane(plane) {
+      this.airplanes.forEach(p => {
+        p.selected = false;
+      });
+      this.selectedPlane = plane;
+      if (plane) {
+        plane.selected = true;
+      }
+    },
+
+    applyAirport(airport) {
+      this.airport = airport;
+      this.runways = airport.runways;
+      this.navBeacons = airport.navBeacons;
+      this.restrictedAreas = airport.restrictedAreas;
+      this.departureProcedures = airport.departureProcedures;
+      this.radarBounds = {
+        minX: -50,
+        maxX: airport.canvas.width + 50,
+        minY: -50,
+        maxY: airport.canvas.height + 50,
+      };
+      this.airplanes = [];
+      this.incomingAircraft = [];
+      this.selectedPlane = null;
+      this.dragging = false;
+      this.dragFollowing = null;
+      this.dragLine = null;
+      this.groundWaitingStartTimes = {};
+      this.problemAircraft = [];
+      this.isGameOver = false;
+      this.gameOverReason = '';
+      this.gameOverMessage = '';
+      this.sweepAngle = 0;
+      this.testAircraftSpawned = false;
+      this.lastTouchdownAltitude = null;
+    },
+
+    changeAirport() {
+      if (this.gameStatus === 'running') return;
+      const airport = this.airports.find(item => item.id === this.selectedAirportId) || DEFAULT_AIRPORT;
+      this.applyAirport(airport);
+      this.gameStatus = 'start';
+      this.communicationLog = ['', '', '', ''];
+      this.allCommunicationLog = ['', '', '', ''];
+      this.addToCommunicationLog(`Airport changed: ${airport.name}`);
     },
     
     startGame() {
@@ -554,12 +768,8 @@ export default {
       // 设置游戏更新循环
       this.lastUpdateTime = Date.now();
       
-      if (!this.gameLoopId) {
-        this.gameLoopId = setInterval(() => {
-          this.updateFlights();
-          this.radarSweep();
-        }, 50);
-      }
+      // renderLoop is the single simulation clock. A second interval here made
+      // aircraft movement and landing behavior depend on device frame rate.
       
       // 初始化动态难度系统
       this.gamePhase = 'normal';
@@ -579,8 +789,19 @@ export default {
         clearTimeout(this.phaseChangeTimeout);
       }
       
-      // 初始生成一架飞机
-      this.spawnApproach();
+      this.testAircraftSpawned = false;
+      this.lastTouchdownAltitude = null;
+      if (this.testScenario === 'collision') {
+        this.setupCollisionTestScenario();
+      } else if (this.testScenario === 'voice') {
+        this.setupVoiceTestScenario();
+      } else if (this.testScenario === 'takeoff') {
+        this.setupTakeoffTestScenario();
+      } else if (this.testScenario === 'altitude') {
+        this.setupAltitudeTestScenario();
+      } else {
+        this.spawnApproach();
+      }
 
       // 清除任何现有的生成定时器
       if (this.spawnApproachInterval) {
@@ -676,11 +897,17 @@ export default {
         : "Game reset, please click \"Start\" button to begin");
     },
     
-    renderLoop() {
+    renderLoop(timestamp = performance.now()) {
+      const realDt = this.lastRenderTime
+        ? Math.min((timestamp - this.lastRenderTime) / 1000, 0.1)
+        : 1 / 60;
+      this.lastRenderTime = timestamp;
+      const simulationDt = Math.min(realDt * this.speedLevel, 0.1);
       this.drawRadar();
       
       if (this.gameStatus === 'running') {
-        this.updateFlights();
+        this.updateFlights(simulationDt);
+        this.radarSweep(simulationDt);
       }
       
       requestAnimationFrame(this.renderLoop);
@@ -716,6 +943,92 @@ export default {
       
       // 将数字转为字符串并处理每一位
       return String(number).split('').map(digit => aviationDigits[digit] || digit).join('');
+    },
+
+    ensurePreferredSpeechVoice() {
+      if (!window.speechSynthesis) return Promise.resolve(null);
+
+      const loadedVoices = window.speechSynthesis.getVoices();
+      const originalYoungVoice = selectOriginalYoungSpeechVoice(loadedVoices);
+      if (originalYoungVoice) {
+        this._preferredSpeechVoice = originalYoungVoice;
+        this.preferredSpeechVoiceName = originalYoungVoice.name;
+        return Promise.resolve(originalYoungVoice);
+      }
+
+      if (this._speechVoicePromise) return this._speechVoicePromise;
+
+      this._speechVoicePromise = new Promise(resolve => {
+        let attempts = 0;
+        const finish = voice => {
+          if (this._speechVoiceTimer) {
+            clearInterval(this._speechVoiceTimer);
+            this._speechVoiceTimer = null;
+          }
+          if (this._speechVoicesChangedHandler) {
+            window.speechSynthesis.removeEventListener('voiceschanged', this._speechVoicesChangedHandler);
+            this._speechVoicesChangedHandler = null;
+          }
+          this._preferredSpeechVoice = voice;
+          this.preferredSpeechVoiceName = voice?.name || '';
+          this._speechVoicePromise = null;
+          resolve(voice);
+        };
+
+        const checkVoices = () => {
+          attempts += 1;
+          const voices = window.speechSynthesis.getVoices();
+          const youngVoice = selectOriginalYoungSpeechVoice(voices);
+          if (youngVoice) {
+            finish(youngVoice);
+          } else if (attempts >= 30) {
+            finish(selectPreferredSpeechVoice(voices));
+          }
+        };
+
+        this._speechVoicesChangedHandler = checkVoices;
+        window.speechSynthesis.addEventListener('voiceschanged', checkVoices);
+        this._speechVoiceTimer = setInterval(checkVoices, 100);
+        checkVoices();
+      });
+
+      return this._speechVoicePromise;
+    },
+
+    disposeSpeechVoiceLoader() {
+      this.speechRequestId += 1;
+      if (this._speechVoiceTimer) {
+        clearInterval(this._speechVoiceTimer);
+        this._speechVoiceTimer = null;
+      }
+      if (this._speechVoicesChangedHandler && window.speechSynthesis) {
+        window.speechSynthesis.removeEventListener('voiceschanged', this._speechVoicesChangedHandler);
+        this._speechVoicesChangedHandler = null;
+      }
+    },
+
+    playPreparedSpeech(voiceCommand, requestId) {
+      this.ensurePreferredSpeechVoice().then(voice => {
+        if (requestId !== this.speechRequestId) return;
+
+        return radioEffects.applyRadioEffectToSpeech(voiceCommand, {
+          lang: "en-US",
+          pitch: 1,
+          rate: 1,
+          voice,
+        }).catch(error => {
+          if (requestId !== this.speechRequestId) return;
+          console.error("Radio effect failed, falling back to regular speech:", error);
+          const utterance = new SpeechSynthesisUtterance(voiceCommand);
+          utterance.lang = "en-US";
+          utterance.pitch = 1;
+          utterance.rate = 1;
+          if (voice) utterance.voice = voice;
+          window.speechSynthesis.speak(utterance);
+        });
+      }).catch(error => {
+        console.error("Failed to prepare speech voice:", error);
+      });
     },
     
     // 语音合成 - 支持多语言
@@ -776,86 +1089,9 @@ export default {
       }
       
       console.log(`Speech: ${voiceCommand}`);
-      
-      // 获取可用的语音列表并选择最佳语音
-      const getBestVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        
-        // 优先选择英语语音，按优先级排序
-        const preferredVoices = [
-          'Google US English', // Chrome默认
-          'Alex', // macOS默认
-          'Samantha', // macOS女性语音
-          'Daniel', // macOS男性语音
-          'Microsoft David - English (United States)', // Windows默认
-          'Microsoft Zira - English (United States)' // Windows女性语音
-        ];
-        
-        // 首先尝试找到优先语音
-        for (const preferredVoice of preferredVoices) {
-          const voice = voices.find(v => v.name.includes(preferredVoice));
-          if (voice) {
-            console.log(`使用优先语音: ${voice.name}`);
-            return voice;
-          }
-        }
-        
-        // 如果没有找到优先语音，选择第一个英语语音
-        const englishVoice = voices.find(v => v.lang.startsWith('en-'));
-        if (englishVoice) {
-          console.log(`使用英语语音: ${englishVoice.name}`);
-          return englishVoice;
-        }
-        
-        // 最后回退到第一个可用语音
-        if (voices.length > 0) {
-          console.log(`使用默认语音: ${voices[0].name}`);
-          return voices[0];
-        }
-        
-        return null;
-      };
-      
-      // 使用塔台无线电效果播放语音
-      try {
-        // 尝试使用无线电效果
-        radioEffects.applyRadioEffectToSpeech(voiceCommand, {
-          lang: "en-US",
-          pitch: 1,
-          rate: 1,
-          voice: getBestVoice()
-        }).catch(err => {
-          // 如果无线电效果失败，回退到普通语音
-          console.error("Radio effect failed, falling back to regular speech:", err);
-          const utterance = new SpeechSynthesisUtterance(voiceCommand);
-          utterance.lang = "en-US";
-          utterance.pitch = 1;
-          utterance.rate = 1;
-          
-          // 设置语音
-          const voice = getBestVoice();
-          if (voice) {
-            utterance.voice = voice;
-          }
-          
-          speechSynthesis.speak(utterance);
-        });
-      } catch (e) {
-        // 备用方案：使用普通语音合成
-        console.error("Failed to apply radio effect:", e);
-        const utterance = new SpeechSynthesisUtterance(voiceCommand);
-        utterance.lang = "en-US";
-        utterance.pitch = 1;
-        utterance.rate = 1;
-        
-        // 设置语音
-        const voice = getBestVoice();
-        if (voice) {
-          utterance.voice = voice;
-        }
-        
-        speechSynthesis.speak(utterance);
-      }
+
+      this.speechRequestId += 1;
+      this.playPreparedSpeech(voiceCommand, this.speechRequestId);
       
       if (addToLog) {
         this.addToCommunicationLog(text);
@@ -881,6 +1117,7 @@ export default {
     
     spawnApproach() {
       if (this.gameStatus !== 'running') return;
+      if (this.testMode && this.testAircraftSpawned) return;
       
       // 检查是否已达到当前难度的最大飞机数量限制
       if (this.currentAircraftCount >= this.dynamicMaxAircraftCount) {
@@ -893,20 +1130,25 @@ export default {
       const id = "B" + flightNumber;
       
       // 定义雷达屏幕的绝对边缘位置
+      const { width, height } = this.airport.canvas;
       const edgePoints = [
-        { x: 0, y: Math.random() * 1200, position: "left" },          // 左边缘
-        { x: 1800, y: Math.random() * 1200, position: "right" },       // 右边缘
-        { x: Math.random() * 1800, y: 0, position: "top" },          // 上边缘
-        { x: Math.random() * 1800, y: 1200, position: "bottom" }        // 下边缘
+        { x: 0, y: Math.random() * height, position: "left" },
+        { x: width, y: Math.random() * height, position: "right" },
+        { x: Math.random() * width, y: 0, position: "top" },
+        { x: Math.random() * width, y: height, position: "bottom" },
       ];
       
-      // 随机选择一个边缘点
-      const entry = edgePoints[Math.floor(Math.random() * edgePoints.length)];
+      // Local regression mode uses a stable entry so every airport can be
+      // exercised without random traffic masking landing-rule failures.
+      const entry = this.testMode
+        ? { x: 100, y: this.airport.center.y, position: "left" }
+        : edgePoints[Math.floor(Math.random() * edgePoints.length)];
       
       // 计算朝向屏幕中心的航向
-      const dx = 900 - entry.x;
-      const dy = 600 - entry.y;
+      const dx = this.airport.center.x - entry.x;
+      const dy = this.airport.center.y - entry.y;
       const angle = Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+      const initialAltitude = this.testMode ? 4000 : (Math.floor(Math.random() * 6) + 4) * 1000;
       
       // 根据边缘位置确定倒计时的方向和数字
       let countdownSequence = "54321"; // 默认倒计时顺序
@@ -918,7 +1160,11 @@ export default {
         y: entry.y,
         heading: angle,
         targetHeading: angle,
-        speed: 0.2 * this.speedLevel,
+        altitude: initialAltitude,
+        targetAltitude: initialAltitude,
+        verticalSpeed: 0,
+        indicatedSpeed: 220,
+        speed: 0.2,
         state: "APPROACH",
         selected: false,
         countdown: 5, // 初始倒计时5秒
@@ -926,6 +1172,7 @@ export default {
         position: entry.position, // 记录边缘位置
         fromDirection: entry.position // 记录飞机来自的方向
       };
+      if (this.testMode) this.testAircraftSpawned = true;
       
       // 添加到即将出现的飞机数组
       this.incomingAircraft.push(plane);
@@ -963,6 +1210,7 @@ export default {
     
     spawnDeparture() {
       if (this.gameStatus !== 'running') return;
+      if (this.testMode && this.testAircraftSpawned) return;
       
       // 检查是否已达到当前难度的最大飞机数量限制
       if (this.currentAircraftCount >= this.dynamicMaxAircraftCount) {
@@ -977,25 +1225,25 @@ export default {
       // 计算新飞机在队列中的位置
       const waitingCount = this.airplanes.filter(p => p.state === "READY_FOR_TAKEOFF").length;
       
-      // 基础位置（第一架飞机的位置）
-      const baseX = 900; // 两条跑道之间的位置
-      const baseY = 600; // 跑道中间位置
-      
-      // 每架飞机之间的间距
-      const spacing = 50;
+      const queue = this.airport.departureQueue || { x: this.airport.center.x, y: this.airport.center.y, spacingX: 0, spacingY: 50 };
       
       // 计算当前飞机的位置
       const plane = {
         id,
-        x: baseX,
-        y: baseY + (waitingCount * spacing), // 新飞机放在队列末尾
+        x: queue.x + waitingCount * (queue.spacingX || 0),
+        y: queue.y + waitingCount * (queue.spacingY || 50), // 新飞机放在队列末尾
         heading: 0,
         targetHeading: 0,
+        altitude: 0,
+        targetAltitude: 5000,
+        verticalSpeed: 0,
+        indicatedSpeed: 0,
         speed: 0,
         state: "READY_FOR_TAKEOFF",
         selected: false,
         queuePosition: waitingCount // 记录在队列中的位置
       };
+      if (this.testMode) this.testAircraftSpawned = true;
       
       this.airplanes.push(plane);
       this.addToCommunicationLog(`${id} ready for takeoff`);
@@ -1003,8 +1251,118 @@ export default {
       // 记录生成时间
       this.lastSpawnTime = Date.now();
     },
+
+    setupCollisionTestScenario() {
+      const common = {
+        x: this.airport.center.x + 260,
+        y: this.airport.center.y,
+        heading: 90,
+        targetHeading: 90,
+        altitude: 5000,
+        targetAltitude: 5000,
+        verticalSpeed: 0,
+        indicatedSpeed: 0,
+        speed: 0,
+        state: "FLYING",
+        selected: false,
+        visible: true,
+      };
+      this.airplanes = [
+        { ...common, id: "B9001" },
+        { ...common, id: "B9002" },
+      ];
+      this.testAircraftSpawned = true;
+    },
+
+    setupVoiceTestScenario() {
+      this.airplanes = [{
+        id: "B9001",
+        x: this.airport.center.x + 260,
+        y: this.airport.center.y,
+        heading: 90,
+        targetHeading: 90,
+        altitude: 5000,
+        targetAltitude: 5000,
+        verticalSpeed: 0,
+        indicatedSpeed: 250,
+        speed: 0.2,
+        state: "FLYING",
+        selected: false,
+        visible: true,
+      }];
+      this.testAircraftSpawned = true;
+    },
+
+    setupTakeoffTestScenario() {
+      const runway = this.runways[0];
+      this.airplanes = [{
+        id: "B9001",
+        x: runway.startX,
+        y: runway.startY,
+        heading: runway.heading,
+        targetHeading: runway.heading,
+        altitude: 0,
+        targetAltitude: 5000,
+        verticalSpeed: 0,
+        indicatedSpeed: 80,
+        targetIndicatedSpeed: 220,
+        speed: 0.04,
+        targetMotionSpeed: 0.22,
+        state: "TAKEOFF",
+        runway: runway.id,
+        selected: false,
+        visible: true,
+      }];
+      this.testAircraftSpawned = true;
+    },
+
+    setupAltitudeTestScenario() {
+      const runway = this.runways[0];
+      const entrance = this.getRunwayEntrance(runway);
+      const oppositeHeading = ((runway.heading + 180) % 360) * Math.PI / 180;
+      const finalDistance = 220;
+      const startX = entrance.x + Math.sin(oppositeHeading) * finalDistance;
+      const startY = entrance.y - Math.cos(oppositeHeading) * finalDistance;
+      this.airplanes = [{
+        id: "B9001",
+        x: startX,
+        y: startY,
+        heading: runway.heading,
+        targetHeading: runway.heading,
+        altitude: 1200,
+        targetAltitude: 1200,
+        verticalSpeed: 0,
+        indicatedSpeed: 200,
+        speed: 0.2,
+        state: "FINAL_APPROACH",
+        landingRunway: runway.id,
+        landingDirection: runway.heading,
+        selected: false,
+        visible: true,
+        approachPath: {
+          runwayX: entrance.x,
+          runwayY: entrance.y,
+          finalHeading: runway.heading,
+          phase: "FINAL_APPROACH",
+          initialDistanceToRunway: finalDistance,
+          distanceToRunway: finalDistance,
+          originalSpeed: 0.2,
+          speedFactor: 1,
+          startAltitude: 1200,
+          finalGateAltitude: 1200,
+          thresholdCrossingAltitude: 50,
+          bezierPoints: {
+            start: { x: startX, y: startY },
+            cp1: { x: startX, y: startY },
+            cp2: { x: startX, y: startY },
+            preApproach: { x: startX, y: startY },
+          },
+        },
+      }];
+      this.testAircraftSpawned = true;
+    },
     
-    updateFlights() {
+    updateFlights(frameDt = null) {
       try {
         // 游戏暂停或已结束时不更新
         if (this.gameStatus !== 'running' || this.isGameOver) return;
@@ -1013,7 +1371,9 @@ export default {
         const startTime = performance.now();
         
         const now = Date.now();
-        const dt = Math.min((now - this.lastUpdateTime) / 1000, 0.1); // 限制最大时间步长
+        const dt = Number.isFinite(frameDt) && frameDt > 0
+          ? Math.min(frameDt, 0.1)
+          : Math.min((now - this.lastUpdateTime) / 1000, 0.1);
         this.lastUpdateTime = now;
         
         // 待移除的飞机
@@ -1024,6 +1384,9 @@ export default {
         
         // 检查飞机是否飞出边界
         this.checkAircraftOutOfBounds();
+
+        // 检查限制区/禁区侵入
+        this.checkRestrictedAreaViolations();
         
         // 检查地面等待超时
         this.checkGroundDelays();
@@ -1037,6 +1400,8 @@ export default {
         // 遍历所有飞机，更新状态
       for (const plane of this.airplanes) {
           try {
+            this.updateAircraftAltitude(plane, dt);
+
             // 更新地面等待时间
             if (plane.state === "READY_FOR_TAKEOFF") {
               // 记录飞机开始在地面等待的时间
@@ -1059,27 +1424,27 @@ export default {
             // 检查是否有新命令标记，新命令优先，取消进场
             if (plane.newCommandIssued) {
               console.log(`${plane.id} 收到新命令，取消进场过程`);
-              plane.state = "FLYING"; // 从APPROACH改为FLYING，确保彻底脱离进场状态
-              plane.speed = 0.4 * this.speedLevel; // 增加速度以便快速脱离跑道
-              plane._lastHeadingTime = 0; // 重置航向变化计时器
-              plane._headingStep = 0; // 重置航向变化步长
-              plane.approachPath = null;
-              plane.approachPathCreated = false;
-              plane.landingRunway = null;
-              plane.newCommandIssued = false; // 重置标记
-              
-              // 清除目标跑道坐标 - 确保不会继续原来的着陆
-              plane.targetRunwayX = undefined;
-              plane.targetRunwayY = undefined;
+              if (plane.state === "APPROACH" || plane.state === "FINAL_APPROACH" || plane.state === "LANDING" || plane.landingRunway) {
+                this.initiateMissedApproach(plane, { log: false });
+              } else {
+                plane.state = "FLYING";
+                plane.targetMotionSpeed = 0.2;
+                plane.targetIndicatedSpeed = 250;
+                plane._lastHeadingTime = 0;
+                plane._headingStep = 0;
+              }
+              plane.newCommandIssued = false;
               
               console.debug(`已清除${plane.id}的进场路径，当前飞机状态: ${plane.state}，位置: (${Math.round(plane.x)},${Math.round(plane.y)})`);
             }
 
+            this.updateAircraftSpeed(plane, dt);
+
             // 只有没有新命令时才继续进场过程
-            if (plane.state === "FINAL_APPROACH" && plane.approachPath) {
+            if ((plane.state === "FINAL_APPROACH" || plane.state === "APPROACH") && plane.approachPath) {
               // 添加异常保护，防止出现无限循环或性能问题
               try {
-                const updated = this.updateApproachFlight(plane);
+                const updated = this.updateApproachFlight(plane, dt);
                 if (updated) {
                   // 如果进场飞机已更新，跳过普通的更新流程
                   continue;
@@ -1103,8 +1468,7 @@ export default {
             const currentTime = performance.now();
             if (currentTime - startTime > 16) { // 16ms约等于60fps
               console.log(`updateFlights执行时间过长(${Math.round(currentTime - startTime)}ms)，延迟处理剩余飞机`);
-              // 在下一帧继续处理剩余飞机
-              setTimeout(() => this.updateFlights(), 0);
+              // renderLoop will continue with the remaining work on the next frame.
               break;
             }
             
@@ -1123,20 +1487,8 @@ export default {
               plane.targetHeading = Math.round(heading);
               
               // 如果已经接近跑道入口，进入着陆阶段
-              if (distToRunway < 20) {
-                // 进入着陆阶段
-          plane.state = "LANDING";
-                plane.x = plane.targetRunwayX;
-                plane.y = plane.targetRunwayY;
-                plane.runway = plane.landingRunway;
-                plane.landingStartTime = Date.now();
-                
-                // 修改：确保使用适当的降落速度作为原始速度
-                // 使用当前速度，但确保不超过最大安全着陆速度
-                const maxLandingSpeed = 0.4 * this.speedLevel;
-                plane.originalSpeed = Math.min(plane.speed, maxLandingSpeed);
-                
-                plane.landingDirection = plane.landingRunway.startsWith("18") ? 180 : 0; // 设置着陆方向
+              if (distToRunway < this.touchdownCaptureDistance) {
+                this.beginLandingRoll(plane, plane.targetRunwayX, plane.targetRunwayY);
                 
                 // 发出着陆确认
                 const message = `${plane.id}, landing runway ${plane.landingRunway}`;
@@ -1156,13 +1508,20 @@ export default {
             const movingStates = ["APPROACH", "FLYING", "TAKEOFF", "FINAL_APPROACH"];
             
             if (movingStates.includes(plane.state)) {
+              if (plane.departureProcedure) {
+                this.updateDepartureProcedureHeading(plane);
+              } else if (plane.targetBeaconId) {
+                this.updateDirectToBeaconHeading(plane);
+              }
+
               // 常规航向更新
-              this.updateAircraftHeading(plane);
+              this.updateAircraftHeading(plane, dt);
               
               // 计算移动分量
               const headingRad = (plane.heading * Math.PI) / 180;
-              const dx = Math.sin(headingRad) * plane.speed;
-              const dy = -Math.cos(headingRad) * plane.speed;
+              const movementDistance = getMovementDistance(plane.speed, dt);
+              const dx = Math.sin(headingRad) * movementDistance;
+              const dy = -Math.cos(headingRad) * movementDistance;
               
               // 更新位置
               plane.x += dx;
@@ -1174,45 +1533,34 @@ export default {
               // 检查是否有新命令
               if (plane.newCommandIssued) {
                 console.log(`${plane.id} 在降落过程中收到新命令，中止降落`);
-                plane.state = "FLYING";
-                plane.speed = 0.4 * this.speedLevel;
-                plane.landingRunway = null;
-                plane.runway = null;
+                this.initiateMissedApproach(plane, { log: true });
                 plane.newCommandIssued = false;
                 continue; // 跳过本次更新，由下一帧处理新指令
               }
               
               // 设置正确的着陆方向
-              const heading = plane.landingDirection || (plane.landingRunway?.startsWith("18") ? 180 : 0);
+              const heading = plane.landingDirection ?? this.getRunwayHeading(plane.landingRunway);
               plane.landingDirection = heading; // 确保设置了着陆方向
               const rad = (heading * Math.PI) / 180;
               
               // 如果没有设置原始速度，设置一个默认值
               if (plane.originalSpeed === undefined) {
-                plane.originalSpeed = 0.5 * this.speedLevel;
+                plane.originalSpeed = 0.14;
               }
               
+              if (!plane.landingRollTargetDistance) {
+                this.initializeLandingRoll(plane);
+              }
+
               // 修正：确保航向角度与飞行方向一致 (0度是北)
-              const dx = Math.sin(rad) * plane.speed;
-              const dy = -Math.cos(rad) * plane.speed;  // 注意负号！确保0度是向上
+              const movementDistance = getMovementDistance(plane.speed, dt);
+              const dx = Math.sin(rad) * movementDistance;
+              const dy = -Math.cos(rad) * movementDistance;  // 注意负号！确保0度是向上
               
               plane.x += dx;
               plane.y += dy;  // y增加表示向下移动
-              
-              // 改进的减速逻辑 - 计算在跑道上行进的距离比例
-              const runwayLength = 300; // 跑道长度
-              let runwayProgress = 0;
-              
-              // 根据跑道方向确定进度计算方式
-              if (plane.landingDirection === 0) { // 朝北着陆
-                // 在南端进入，计算已经向北移动了多少
-                const entryY = 750; // 跑道南端
-                runwayProgress = Math.max(0, Math.min(1, (entryY - plane.y) / runwayLength));
-              } else { // 朝南着陆
-                // 在北端进入，计算已经向南移动了多少
-                const entryY = 450; // 跑道北端
-                runwayProgress = Math.max(0, Math.min(1, (plane.y - entryY) / runwayLength));
-              }
+
+              const runwayProgress = updateLandingRollProgress(plane, Math.hypot(dx, dy));
               
               console.log(`${plane.id} landing progress: ${Math.round(runwayProgress * 100)}%, runway: ${plane.runway}, direction: ${plane.landingDirection}`);
               
@@ -1220,9 +1568,11 @@ export default {
               // 使用二次方程使减速更加自然
               const speedFactor = 1 - (runwayProgress * runwayProgress);
               plane.speed = plane.originalSpeed * speedFactor;
+              const touchdownAirspeed = plane.touchdownAirspeed || 135;
+              plane.indicatedSpeed = Math.max(45, Math.round(touchdownAirspeed * speedFactor));
               
               // 当飞机滑行到跑道的三分之二处时
-              if (runwayProgress >= 2/3) {
+              if (shouldRemoveLandedAircraft(runwayProgress)) {
                 const logMessage = `${plane.id} has vacated runway ${plane.runway}`;
                 this.addToCommunicationLog(logMessage);
                 console.log(logMessage);
@@ -1239,16 +1589,18 @@ export default {
                 
                 // 强制更新当前飞机数量的显示
                 this.$forceUpdate();
+                continue;
               }
         }
 
             // 处理起飞的飞机
         if (plane.state === "TAKEOFF") {
-              // 维持恒定速度，不要逐渐加速
-              plane.speed = 0.2 * this.speedLevel; // 使用与进场飞机相同的速度
+              plane.targetMotionSpeed = 0.22;
+              plane.targetIndicatedSpeed = 220;
 
               // 检查飞机是否接近任何导航台
               for (const beacon of this.navBeacons) {
+                if (plane.departureProcedure) break;
                 const distToBeacon = Math.sqrt(
                   Math.pow(plane.x - beacon.x, 2) + 
                   Math.pow(plane.y - beacon.y, 2)
@@ -1271,7 +1623,10 @@ export default {
               }
               
               // 检查飞机是否已离开雷达范围
-              if (plane.x < -100 || plane.x > 1900 || plane.y < -100 || plane.y > 1300) {
+              if (plane.x < this.radarBounds.minX ||
+                  plane.x > this.radarBounds.maxX ||
+                  plane.y < this.radarBounds.minY ||
+                  plane.y > this.radarBounds.maxY) {
                 this.addToCommunicationLog(`${plane.id} has exited radar coverage`);
             toRemove.push(plane);
                 
@@ -1279,6 +1634,33 @@ export default {
                 this.canSpawnNewAircraft = true;
           }
         }
+
+            if (plane.targetBeaconId && plane.state !== "TAKEOFF") {
+              const beacon = this.navBeacons.find(item => item.id === plane.targetBeaconId);
+              if (beacon) {
+                const distToBeacon = Math.sqrt(
+                  Math.pow(plane.x - beacon.x, 2) +
+                  Math.pow(plane.y - beacon.y, 2)
+                );
+
+                if (distToBeacon < 40) {
+                  this.score += 1;
+                  this.speak(`${plane.id} direct ${beacon.id} complete, exiting radar coverage`, true);
+                  toRemove.push(plane);
+                  this.canSpawnNewAircraft = true;
+                }
+              }
+            }
+
+            if (plane.departureProcedure) {
+              const complete = this.updateDepartureProcedureProgress(plane);
+              if (complete) {
+                this.score += 1;
+                this.speak(`${plane.id} completed ${plane.departureProcedure.id}, exiting radar coverage`, true);
+                toRemove.push(plane);
+                this.canSpawnNewAircraft = true;
+              }
+            }
           } catch (planeError) {
             // 单个飞机更新出错，记录但继续处理其他飞机
             console.error(`更新飞机 ${plane.id} 时出错:`, planeError);
@@ -1316,7 +1698,21 @@ export default {
     },
 
     // 新增方法 - 统一的航向更新逻辑
-    updateAircraftHeading(plane) {
+    updateAircraftSpeed(plane, dt) {
+      if (!plane || plane.state === "READY_FOR_TAKEOFF" || plane.state === "LANDING" || plane.approachPath) return;
+
+      const defaultMotionSpeed = plane.state === "TAKEOFF" ? 0.22 : 0.2;
+      const defaultIndicatedSpeed = plane.state === "TAKEOFF"
+        ? 220
+        : (plane.state === "APPROACH" ? 220 : 250);
+      const targetMotionSpeed = plane.targetMotionSpeed ?? defaultMotionSpeed;
+      const targetIndicatedSpeed = plane.targetIndicatedSpeed ?? defaultIndicatedSpeed;
+
+      plane.speed = getNextValue(plane.speed || 0, targetMotionSpeed, 0.05, dt);
+      plane.indicatedSpeed = getNextValue(plane.indicatedSpeed || 0, targetIndicatedSpeed, 18, dt);
+    },
+
+    updateAircraftHeading(plane, dt) {
       // 使用整数值计算，确保精确性
       const currentHeading = Math.round(plane.heading) % 360;
       const targetHeading = Math.round(plane.targetHeading) % 360;
@@ -1348,7 +1744,7 @@ export default {
       }
       
       // 应用系数计算实际转向速率
-      const turnRate = baseTurnRate * turnRateMultiplier;
+      const turnRate = getTurnStep(baseTurnRate * turnRateMultiplier, dt);
       
       // 确定转向方向
       let shouldTurnClockwise;
@@ -1392,48 +1788,493 @@ export default {
       // 记录当前转向方向用于持续转向的一致性
       plane.lastTurnDirection = shouldTurnClockwise ? 'right' : 'left';
     },
+
+    updateAircraftAltitude(plane, dt) {
+      if (plane.state === "READY_FOR_TAKEOFF") {
+        plane.altitude = 0;
+        plane.verticalSpeed = 0;
+        return;
+      }
+
+      if (plane.state === "TAKEOFF" && (plane.indicatedSpeed || 0) < this.takeoffRotationSpeed) {
+        plane.altitude = 0;
+        plane.verticalSpeed = 0;
+        return;
+      }
+
+      this.updateApproachAltitudeProfile(plane);
+
+      if (plane.state === "LANDING") {
+        plane.altitude = 0;
+        plane.targetAltitude = 0;
+        plane.verticalSpeed = 0;
+        return;
+      } else if (plane.state === "TAKEOFF" && (!plane.targetAltitude || plane.targetAltitude < 3000)) {
+        plane.targetAltitude = 5000;
+      }
+
+      const currentAltitude = plane.altitude || 0;
+      const targetAltitude = plane.targetAltitude ?? currentAltitude;
+      const diff = targetAltitude - currentAltitude;
+      if (Math.abs(diff) < 10) {
+        plane.altitude = targetAltitude;
+        plane.verticalSpeed = 0;
+        if (plane.missedApproachActive && targetAltitude >= this.missedApproachAltitude) {
+          plane.missedApproachActive = false;
+        }
+        return;
+      }
+
+      const direction = Math.sign(diff);
+      const rate = this.getAircraftAltitudeChangeRate(plane, currentAltitude, targetAltitude);
+      plane.altitude = getNextAltitude(currentAltitude, targetAltitude, rate, dt);
+      plane.verticalSpeed = direction * rate;
+    },
+
+    getAircraftAltitudeChangeRate(plane, currentAltitude, targetAltitude) {
+      if (plane.missedApproachActive) {
+        return this.takeoffAltitudeChangeRate;
+      }
+
+      if (plane.state === "TAKEOFF") {
+        return this.takeoffAltitudeChangeRate;
+      }
+
+      if (plane.state === "FINAL_APPROACH") {
+        if (plane.approachPath?.phase === "INITIAL") {
+          return this.approachAltitudeChangeRate;
+        }
+
+        const threshold = this.getLandingThresholdForPlane(plane);
+        const distanceToThreshold = threshold
+          ? Math.hypot(threshold.x - plane.x, threshold.y - plane.y)
+          : 0;
+        const usableDescentDistance = Math.max(1, distanceToThreshold - this.touchdownCaptureDistance);
+        return getRequiredVerticalRate(
+          currentAltitude,
+          50,
+          usableDescentDistance,
+          plane.speed || 0.12,
+          this.finalApproachAltitudeChangeRate,
+        );
+      }
+
+      if (plane.state === "APPROACH" && plane.landingRunway) {
+        return this.approachAltitudeChangeRate;
+      }
+
+      if (plane.state === "LANDING") {
+        return this.finalApproachAltitudeChangeRate;
+      }
+
+      if (targetAltitude < currentAltitude && plane.landingRunway) {
+        return this.approachAltitudeChangeRate;
+      }
+
+      return this.altitudeChangeRate;
+    },
+
+    getMissedApproachAltitude(plane) {
+      const currentAltitude = plane?.altitude || 0;
+      const currentTarget = plane?.targetAltitude || 0;
+      return Math.max(this.missedApproachAltitude, currentAltitude, currentTarget);
+    },
+
+    initiateMissedApproach(plane, options = {}) {
+      if (!plane) return;
+
+      const runwayHeading = plane.landingRunway ? this.getRunwayHeading(plane.landingRunway) : null;
+      const climbAltitude = this.getMissedApproachAltitude(plane);
+
+      plane.state = "FLYING";
+      plane.approachPath = null;
+      plane.approachPathCreated = false;
+      plane.landingRunway = null;
+      plane.targetRunwayX = undefined;
+      plane.targetRunwayY = undefined;
+      plane.runway = null;
+      plane.landingStartTime = null;
+      plane.landingDirection = null;
+      plane.landingRollDistance = 0;
+      plane.landingRollTargetDistance = undefined;
+      plane.originalSpeed = undefined;
+      plane.speed = Math.max(plane.speed || 0, 0.08);
+      plane.targetMotionSpeed = 0.22;
+      plane.targetIndicatedSpeed = 180;
+      plane.targetAltitude = climbAltitude;
+      plane.missedApproachActive = true;
+      plane.verticalSpeed = this.approachAltitudeChangeRate;
+      plane._lastHeadingTime = 0;
+      plane._headingStep = 0;
+
+      if (runwayHeading !== null && options.preserveHeading !== true) {
+        plane.targetHeading = runwayHeading;
+        plane.heading = plane.heading ?? runwayHeading;
+      }
+
+      if (options.log !== false) {
+        this.addToCommunicationLog(`${plane.id}, go around, climb ${climbAltitude}`);
+      }
+    },
+
+    initializeLandingRoll(plane) {
+      if (!plane) return;
+
+      plane.landingRollDistance = 0;
+      // Keep landing completion consistent across maps; this matches the original
+      // Capital sector rollout feel instead of scaling by longer custom runways.
+      plane.landingRollTargetDistance = getLandingRollTargetDistance();
+    },
+
+    beginLandingRoll(plane, runwayX, runwayY) {
+      if (!plane) return;
+
+      const landingRunway = plane.landingRunway || plane.runway;
+      const maxLandingSpeed = 0.16;
+      const minimumLandingSpeed = 0.1;
+      const touchdownSpeed = Math.max(minimumLandingSpeed, plane.speed || minimumLandingSpeed);
+
+      this.lastTouchdownAltitude = Math.round(plane.altitude || 0);
+      plane.state = "LANDING";
+      plane.x = runwayX;
+      plane.y = runwayY;
+      plane.runway = landingRunway;
+      plane.altitude = 0;
+      plane.targetAltitude = 0;
+      plane.verticalSpeed = 0;
+      plane.landingStartTime = Date.now();
+      plane.originalSpeed = Math.min(touchdownSpeed, maxLandingSpeed);
+      plane.speed = plane.originalSpeed;
+      plane.touchdownAirspeed = Math.min(145, Math.max(125, plane.indicatedSpeed || 135));
+      plane.indicatedSpeed = plane.touchdownAirspeed;
+      plane.landingDirection = this.getRunwayHeading(landingRunway);
+      this.initializeLandingRoll(plane);
+    },
+
+    updateApproachAltitudeProfile(plane) {
+      if (!plane?.landingRunway || !["APPROACH", "FINAL_APPROACH", "LANDING"].includes(plane.state)) {
+        return;
+      }
+
+      if (plane.state === "LANDING") {
+        plane.altitude = 0;
+        plane.targetAltitude = 0;
+        plane.verticalSpeed = 0;
+        return;
+      }
+
+      const profileAltitude = this.calculateApproachProfileAltitude(plane);
+      if (profileAltitude === null) return;
+
+      plane.targetAltitude = profileAltitude;
+    },
+
+    calculateApproachProfileAltitude(plane) {
+      const currentAltitude = plane.altitude ?? plane.targetAltitude ?? 3000;
+      const path = plane.approachPath;
+
+      if (plane.state === "APPROACH" || (plane.state === "FINAL_APPROACH" && path?.phase === "INITIAL")) {
+        const startAltitude = path?.startAltitude ?? currentAltitude;
+        const finalGateAltitude = path?.finalGateAltitude ?? 1200;
+        const progress = Math.max(0, Math.min(1, path?.progressT ?? 0));
+        return Math.max(finalGateAltitude, startAltitude - (startAltitude - finalGateAltitude) * progress);
+      }
+
+      if (plane.state === "FINAL_APPROACH") {
+        const threshold = this.getLandingThresholdForPlane(plane);
+        if (!threshold) return null;
+
+        const distanceToThreshold = Math.hypot(threshold.x - plane.x, threshold.y - plane.y);
+        const initialFinalDistance = Math.max(path?.initialDistanceToRunway || 0, 120);
+        const usableInitialDistance = Math.max(1, initialFinalDistance - this.touchdownCaptureDistance);
+        const usableDistance = Math.max(0, distanceToThreshold - this.touchdownCaptureDistance);
+        const ratio = Math.max(0, Math.min(1, usableDistance / usableInitialDistance));
+        const thresholdCrossingAltitude = 50;
+        const finalGateAltitude = path?.finalGateAltitude ?? 1200;
+        const altitude = thresholdCrossingAltitude + (finalGateAltitude - thresholdCrossingAltitude) * ratio;
+        return Math.max(0, Math.round(altitude / 50) * 50);
+      }
+
+      return plane.state === "LANDING" ? 0 : null;
+    },
+
+    getLandingThresholdForPlane(plane) {
+      if (plane?.approachPath?.runwayX !== undefined && plane?.approachPath?.runwayY !== undefined) {
+        return { x: plane.approachPath.runwayX, y: plane.approachPath.runwayY };
+      }
+
+      if (plane?.targetRunwayX !== undefined && plane?.targetRunwayY !== undefined) {
+        return { x: plane.targetRunwayX, y: plane.targetRunwayY };
+      }
+
+      const runway = this.runways.find(item => item.id === plane?.landingRunway || item.id === plane?.runway);
+      return runway ? this.getRunwayEntrance(runway) : null;
+    },
+
+    updateDirectToBeaconHeading(plane) {
+      const beacon = this.navBeacons.find(item => item.id === plane.targetBeaconId);
+      if (!beacon) {
+        plane.targetBeaconId = null;
+        plane.targetBeaconX = undefined;
+        plane.targetBeaconY = undefined;
+        return;
+      }
+      plane.targetHeading = this.calculateBearing(plane.x, plane.y, beacon.x, beacon.y);
+    },
+
+    updateDepartureProcedureHeading(plane) {
+      const procedure = plane.departureProcedure;
+      if (!procedure?.points?.length) return;
+
+      const waypointIndex = Math.min(plane.departureProcedureWaypointIndex || 0, procedure.points.length - 1);
+      const waypoint = procedure.points[waypointIndex];
+      plane.targetHeading = this.calculateBearing(plane.x, plane.y, waypoint.x, waypoint.y);
+    },
+
+    updateDepartureProcedureProgress(plane) {
+      const procedure = plane.departureProcedure;
+      if (!procedure?.points?.length) return false;
+
+      const waypointIndex = Math.min(plane.departureProcedureWaypointIndex || 0, procedure.points.length - 1);
+      const waypoint = procedure.points[waypointIndex];
+      const distance = Math.sqrt(Math.pow(plane.x - waypoint.x, 2) + Math.pow(plane.y - waypoint.y, 2));
+
+      if (distance > 45) return false;
+
+      if (waypointIndex >= procedure.points.length - 1) {
+        return true;
+      }
+
+      plane.departureProcedureWaypointIndex = waypointIndex + 1;
+      const nextWaypoint = procedure.points[plane.departureProcedureWaypointIndex];
+      plane.targetHeading = this.calculateBearing(plane.x, plane.y, nextWaypoint.x, nextWaypoint.y);
+      this.addToCommunicationLog(`${plane.id} established ${procedure.id} waypoint ${plane.departureProcedureWaypointIndex + 1}`);
+      return false;
+    },
+
+    radarSweep(dt = 1 / 60) {
+      this.sweepAngle = (this.sweepAngle + 36 * Math.min(Math.max(dt, 0), 0.1)) % 360;
+    },
+
+    drawRadarBackground(ctx) {
+      const { width, height } = this.airport.canvas;
+      const { x: centerX, y: centerY } = this.airport.center;
+
+      const bg = ctx.createRadialGradient(centerX, centerY, 80, centerX, centerY, 980);
+      bg.addColorStop(0, "#0b2423");
+      bg.addColorStop(0.55, "#071717");
+      bg.addColorStop(1, "#020607");
+      ctx.fillStyle = bg;
+      ctx.fillRect(0, 0, width, height);
+
+      ctx.save();
+      ctx.strokeStyle = "rgba(143, 255, 230, 0.08)";
+      ctx.lineWidth = 1;
+      for (let x = 0; x <= width; x += 50) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
+        ctx.stroke();
+      }
+      for (let y = 0; y <= height; y += 50) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(width, y);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = "rgba(0, 255, 204, 0.22)";
+      ctx.fillStyle = "rgba(143, 255, 230, 0.62)";
+      ctx.font = "12px monospace";
+      for (let r = 200; r <= 1000; r += 200) {
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.fillText(`${r / 20}NM`, centerX + r + 8, centerY - 5);
+      }
+
+      ctx.strokeStyle = "rgba(0, 255, 204, 0.18)";
+      for (let deg = 0; deg < 360; deg += 15) {
+        const rad = deg * Math.PI / 180;
+        const inner = deg % 45 === 0 ? 20 : 120;
+        ctx.beginPath();
+        ctx.moveTo(centerX + Math.sin(rad) * inner, centerY - Math.cos(rad) * inner);
+        ctx.lineTo(centerX + Math.sin(rad) * 1040, centerY - Math.cos(rad) * 1040);
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = "rgba(143, 255, 230, 0.55)";
+      ctx.beginPath();
+      ctx.moveTo(centerX, 0);
+      ctx.lineTo(centerX, height);
+      ctx.moveTo(0, centerY);
+      ctx.lineTo(width, centerY);
+      ctx.stroke();
+
+      ctx.fillStyle = "rgba(231, 255, 248, 0.82)";
+      ctx.font = "bold 13px monospace";
+      ctx.fillText("N", centerX - 4, 22);
+      ctx.fillText("S", centerX - 4, height - 12);
+      ctx.fillText("W", 12, centerY + 4);
+      ctx.fillText("E", width - 20, centerY + 4);
+
+      const sweepRad = this.sweepAngle * Math.PI / 180;
+      const sweepGradient = ctx.createRadialGradient(centerX, centerY, 0, centerX, centerY, 1040);
+      sweepGradient.addColorStop(0, "rgba(139, 255, 232, 0.34)");
+      sweepGradient.addColorStop(1, "rgba(139, 255, 232, 0)");
+      ctx.fillStyle = sweepGradient;
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.arc(centerX, centerY, 1040, sweepRad - 0.045, sweepRad + 0.045);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "rgba(180, 255, 240, 0.58)";
+      ctx.beginPath();
+      ctx.moveTo(centerX, centerY);
+      ctx.lineTo(centerX + Math.cos(sweepRad) * 1040, centerY + Math.sin(sweepRad) * 1040);
+      ctx.stroke();
+      ctx.restore();
+    },
+
+    drawRunways(ctx) {
+      ctx.save();
+      for (const runway of this.airport.physicalRunways) {
+        const heading = runway.heading ?? 0;
+        const rad = heading * Math.PI / 180;
+        const axis = { x: Math.sin(rad), y: -Math.cos(rad) };
+        const perp = { x: Math.cos(rad), y: Math.sin(rad) };
+        const halfLength = runway.length / 2;
+        const halfWidth = runway.width / 2;
+        const corners = [
+          {
+            x: runway.x - axis.x * halfLength - perp.x * halfWidth,
+            y: runway.y - axis.y * halfLength - perp.y * halfWidth,
+          },
+          {
+            x: runway.x - axis.x * halfLength + perp.x * halfWidth,
+            y: runway.y - axis.y * halfLength + perp.y * halfWidth,
+          },
+          {
+            x: runway.x + axis.x * halfLength + perp.x * halfWidth,
+            y: runway.y + axis.y * halfLength + perp.y * halfWidth,
+          },
+          {
+            x: runway.x + axis.x * halfLength - perp.x * halfWidth,
+            y: runway.y + axis.y * halfLength - perp.y * halfWidth,
+          },
+        ];
+
+        ctx.fillStyle = "#2f3a3a";
+        ctx.strokeStyle = "rgba(231, 255, 248, 0.62)";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(corners[0].x, corners[0].y);
+        for (const corner of corners.slice(1)) {
+          ctx.lineTo(corner.x, corner.y);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(231, 255, 248, 0.55)";
+        ctx.setLineDash([18, 14]);
+        ctx.beginPath();
+        ctx.moveTo(runway.x - axis.x * (halfLength - 20), runway.y - axis.y * (halfLength - 20));
+        ctx.lineTo(runway.x + axis.x * (halfLength - 20), runway.y + axis.y * (halfLength - 20));
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.fillStyle = "#f4fff9";
+        ctx.font = "bold 16px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(
+          runway.labels.end,
+          runway.x - axis.x * (halfLength + 18),
+          runway.y - axis.y * (halfLength + 18),
+        );
+        ctx.fillText(
+          runway.labels.start,
+          runway.x + axis.x * (halfLength + 26),
+          runway.y + axis.y * (halfLength + 26),
+        );
+      }
+      ctx.textAlign = "start";
+      ctx.restore();
+    },
+
+    drawRestrictedAreas(ctx) {
+      ctx.save();
+      for (const area of this.restrictedAreas) {
+        if (!area.points || area.points.length < 3) continue;
+        ctx.beginPath();
+        ctx.moveTo(area.points[0].x, area.points[0].y);
+        for (const point of area.points.slice(1)) {
+          ctx.lineTo(point.x, point.y);
+        }
+        ctx.closePath();
+        ctx.fillStyle = area.active ? "rgba(255, 76, 76, 0.08)" : "rgba(255, 184, 77, 0.06)";
+        ctx.strokeStyle = area.active ? "rgba(255, 94, 94, 0.72)" : "rgba(255, 184, 77, 0.45)";
+        ctx.lineWidth = 2;
+        ctx.setLineDash([10, 8]);
+        ctx.fill();
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        const labelPoint = area.points.reduce((acc, point) => ({
+          x: acc.x + point.x / area.points.length,
+          y: acc.y + point.y / area.points.length,
+        }), { x: 0, y: 0 });
+        ctx.fillStyle = area.active ? "#ff9b9b" : "#ffd699";
+        ctx.font = "bold 13px monospace";
+        ctx.textAlign = "center";
+        ctx.fillText(area.id, labelPoint.x, labelPoint.y - 4);
+        ctx.fillText(area.label, labelPoint.x, labelPoint.y + 14);
+      }
+      ctx.textAlign = "start";
+      ctx.restore();
+    },
+
+    drawDepartureProcedures(ctx) {
+      ctx.save();
+      ctx.strokeStyle = "rgba(92, 185, 255, 0.42)";
+      ctx.fillStyle = "rgba(92, 185, 255, 0.82)";
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([8, 10]);
+      for (const procedure of this.departureProcedures) {
+        if (!procedure.points || procedure.points.length < 2) continue;
+        ctx.beginPath();
+        ctx.moveTo(procedure.points[0].x, procedure.points[0].y);
+        for (const point of procedure.points.slice(1)) {
+          ctx.lineTo(point.x, point.y);
+        }
+        ctx.stroke();
+
+        const lastPoint = procedure.points[procedure.points.length - 1];
+        ctx.setLineDash([]);
+        ctx.font = "12px monospace";
+        ctx.fillText(`${procedure.id} VIA ${procedure.via}`, lastPoint.x + 12, lastPoint.y - 10);
+        ctx.setLineDash([8, 10]);
+      }
+      ctx.setLineDash([]);
+      ctx.restore();
+    },
+
     drawRadar() {
       const ctx = this.ctx;
-      ctx.clearRect(0, 0, 1800, 1200);
-      ctx.fillStyle = "#0a1a1a";
-      ctx.fillRect(0, 0, 1800, 1200);
+      const { width, height } = this.airport.canvas;
+      ctx.clearRect(0, 0, width, height);
+      this.drawRadarBackground(ctx);
 
       // 如果游戏已结束，降低雷达背景亮度
       if (this.isGameOver) {
         ctx.fillStyle = "rgba(0, 0, 0, 0.5)";
-        ctx.fillRect(0, 0, 1800, 1200);
+        ctx.fillRect(0, 0, width, height);
       }
 
-      // 调整跑道位置到新的中心点 (900, 600)
-      ctx.fillStyle = "#444";
-      ctx.fillRect(800, 450, 60, 300); // 左跑道
-      ctx.fillRect(940, 450, 60, 300); // 右跑道
-
-      // 调整跑道标识位置
-      ctx.fillStyle = "#fff";
-      ctx.font = "bold 16px monospace";
-      // 北端（顶部）是 18（朝南）
-      ctx.fillText("18R", 810, 445); // 左跑道顶部
-      ctx.fillText("18L", 950, 445); // 右跑道顶部
-      // 南端（底部）是 36（朝北）
-      ctx.fillText("36L", 810, 770); // 左跑道底部
-      ctx.fillText("36R", 950, 770); // 右跑道底部
-
-      // 绘制雷达环
-      ctx.strokeStyle = "#004433";
-      for (let r = 200; r <= 1000; r += 200) {
-        ctx.beginPath();
-        ctx.arc(900, 600, r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-
-      // 绘制方向线
-      ctx.beginPath();
-      ctx.moveTo(900, 0);
-      ctx.lineTo(900, 1200);
-      ctx.moveTo(0, 600);
-      ctx.lineTo(1800, 600);
-      ctx.stroke();
+      this.drawRestrictedAreas(ctx);
+      this.drawDepartureProcedures(ctx);
+      this.drawRunways(ctx);
 
       // 绘制导航台
       this.drawNavBeacons(ctx);
@@ -1512,22 +2353,15 @@ export default {
         }
         
         ctx.font = "14px monospace";
-        ctx.fillText(`${plane.id} [${plane.state}]`, plane.x + 25, plane.y);
-        
-        // 显示航向信息 - 总是显示当前航向和目标航向（如果不同）
+        const currentHdg = Math.round(plane.heading) % 360;
+        const altitudeHundreds = Math.round((plane.altitude || 0) / 100).toString().padStart(3, "0");
+        const verticalTrend = plane.verticalSpeed > 50 ? "↑" : plane.verticalSpeed < -50 ? "↓" : " ";
+        const airspeed = Math.max(0, Math.round(plane.indicatedSpeed || 0)).toString().padStart(3, "0");
+
+        ctx.fillText(plane.id, plane.x + 25, plane.y);
         ctx.fillStyle = "#00ffcc";
         ctx.font = "12px monospace";
-        
-        const currentHdg = Math.round(plane.heading) % 360;
-        const targetHdg = Math.round(plane.targetHeading) % 360;
-        
-        if (plane.selected) {
-          if (currentHdg !== targetHdg) {
-            ctx.fillText(`HDG: ${currentHdg}° → ${targetHdg}°`, plane.x + 25, plane.y + 20);
-          } else {
-            ctx.fillText(`HDG: ${currentHdg}°`, plane.x + 25, plane.y + 20);
-          }
-        }
+        ctx.fillText(`A${altitudeHundreds}${verticalTrend} S${airspeed} H${currentHdg.toString().padStart(3, "0")}`, plane.x + 25, plane.y + 18);
       }
 
       // 绘制拖拽线和转弯轨迹
@@ -1615,7 +2449,17 @@ export default {
           const turnDir = shouldTurnClockwise ? "right" : "left";
           
           // 绘制从当前位置到跑道入口的弧线轨迹
-          this.drawApproachPath(ctx, startX, startY, entranceX, entranceY, currentHeading, finalHeading, shouldTurnClockwise);
+          this.drawApproachPath(
+            ctx,
+            startX,
+            startY,
+            entranceX,
+            entranceY,
+            currentHeading,
+            finalHeading,
+            shouldTurnClockwise,
+            this.dragLine.finalApproachDistance || 220,
+          );
           
           // 显示进场信息
           ctx.setLineDash([]);
@@ -2021,46 +2865,35 @@ export default {
         const x = plane.x;
         const y = plane.y;
 
-        // 记录原始位置（用于回到原位）
-        const originalX = 900; // 默认位置（跑道中间）
-        const originalY = 600;
+        const queue = this.airport.departureQueue || { x: this.airport.center.x, y: this.airport.center.y, spacingX: 0, spacingY: 50 };
+        const queuePosition = plane.queuePosition || 0;
+        const originalX = queue.x + queuePosition * (queue.spacingX || 0);
+        const originalY = queue.y + queuePosition * (queue.spacingY || 50);
 
         // 记录当前状态
         const originalState = plane.state;
         const wasReadyForTakeoff = originalState === "READY_FOR_TAKEOFF";
 
         if (plane.state === "READY_FOR_TAKEOFF") {
-          // 调整跑道位置判断 (中心是900, 600)
-          const onLeftRunway = x >= 800 && x <= 860;
-          const onRightRunway = x >= 940 && x <= 1000;
-          let success = false;
+          const runwayCheck = this.checkNearRunwayEntrance(x, y);
+          const runwayInfo = runwayCheck.isNear ? runwayCheck.info : null;
+          const success = Boolean(runwayInfo);
 
-          if (y < 460 && (onLeftRunway || onRightRunway)) {
-            // 北端起飞，朝南 (18R/18L runway - heading 180)
-            plane.heading = 180;
-            plane.targetHeading = 180;
+          if (success) {
+            plane.x = runwayInfo.x;
+            plane.y = runwayInfo.y;
+            plane.heading = runwayInfo.direction;
+            plane.targetHeading = runwayInfo.direction;
             plane.state = "TAKEOFF";
-            plane.speed = 0.2 * this.speedLevel;
-            
-            const runwayId = onLeftRunway ? "18R" : "18L";
-            const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
+            plane.speed = 0.04;
+            plane.targetMotionSpeed = 0.22;
+            plane.indicatedSpeed = 80;
+            plane.runway = runwayInfo.id;
+            plane.targetAltitude = Math.max(plane.targetAltitude || 0, 5000);
+
+            const message = `${plane.id}, cleared for takeoff runway ${runwayInfo.id}`;
             this.speak(message);
-            
-            console.log("Taking off southbound from 18R/18L, heading:", plane.heading);
-            success = true;
-          } else if (y > 740 && (onLeftRunway || onRightRunway)) {
-            // 南端起飞，朝北 (36L/36R runway - heading 0)
-            plane.heading = 0;
-            plane.targetHeading = 0;
-            plane.state = "TAKEOFF";
-            plane.speed = 0.2 * this.speedLevel;
-            
-            const runwayId = onLeftRunway ? "36L" : "36R";
-            const message = `${plane.id}, cleared for takeoff runway ${runwayId}`;
-            this.speak(message);
-            
-            console.log("Taking off northbound from 36L/36R, heading:", plane.heading);
-            success = true;
+            console.log(`Taking off runway ${runwayInfo.id}, heading:`, plane.heading);
           }
           
           // 如果放置不成功，将飞机返回原始位置
@@ -2140,6 +2973,8 @@ export default {
         this.dragLine.finalHeading = finalHeading;
         
         // 使用改进的进场航迹生成方法
+        const finalApproachDistance = getFinalApproachDistance(plane.altitude);
+        this.dragLine.finalApproachDistance = finalApproachDistance;
         const pathInfo = this.drawApproachPath(
           this.ctx,
           plane.x,
@@ -2148,7 +2983,8 @@ export default {
           entranceY,
           currentHeading,
           finalHeading,
-          true // 默认顺时针转向，实际由航迹规划算法决定
+          true, // 默认顺时针转向，实际由航迹规划算法决定
+          finalApproachDistance,
         );
         
         // 直接设置为最终进场状态
@@ -2187,6 +3023,9 @@ export default {
           
           // 明确设置原始速度 - 确保进场过程中速度连续性
           originalSpeed: currentSpeed,
+          startAltitude: plane.altitude ?? plane.targetAltitude ?? 3000,
+          finalGateAltitude: 1200,
+          thresholdCrossingAltitude: 50,
           
           // 初始化速度因子为1.0，确保前期不减速
           speedFactor: 1.0,
@@ -2296,8 +3135,8 @@ export default {
     // 绘制导航台方法
     drawNavBeacons(ctx) {
       // 使用与雷达界面相同的蓝色
-      ctx.fillStyle = "#00ffcc";
-      ctx.strokeStyle = "#00ffcc";
+      ctx.fillStyle = "#8fffe6";
+      ctx.strokeStyle = "#8fffe6";
       ctx.lineWidth = 1;
       
       // 绘制每个导航台
@@ -2322,20 +3161,23 @@ export default {
         ctx.font = "14px monospace";
         ctx.textAlign = "center";
         ctx.fillText(beacon.id, beacon.x, beacon.y - 25);
+        ctx.font = "10px monospace";
+        ctx.fillStyle = "rgba(143, 255, 230, 0.62)";
+        ctx.fillText(`${beacon.type || 'FIX'} ${beacon.freq || ''}`, beacon.x, beacon.y + 35);
+        ctx.fillStyle = "#8fffe6";
         ctx.textAlign = "start";
       }
     },
     // 检查位置是否在跑道入口附近 - 优化检测逻辑
     checkNearRunwayEntrance(x, y) {
-      // 定义跑道入口区域 - 扩大检测半径以提高检测精度
-      const runwayEntrances = [
-        // 南侧跑道入口 (36L/36R) - 放在前面优先检查
-        { x: 830, y: 770, id: "36L", direction: 0, type: "south", radius: 50 },
-        { x: 970, y: 770, id: "36R", direction: 0, type: "south", radius: 50 },
-        // 北侧跑道入口 (18R/18L)
-        { x: 830, y: 430, id: "18R", direction: 180, type: "north", radius: 50 },
-        { x: 970, y: 430, id: "18L", direction: 180, type: "north", radius: 50 }
-      ];
+      const runwayEntrances = this.runways.map(runway => ({
+        x: runway.startX,
+        y: runway.startY,
+        id: runway.id,
+        direction: runway.heading,
+        type: runway.heading === 0 ? "south" : "north",
+        radius: 55,
+      }));
       
       // 检查是否接近任一跑道入口
       for (const entrance of runwayEntrances) {
@@ -2356,7 +3198,7 @@ export default {
       return { isNear: false };
     },
     // 绘制进场轨迹路径 - 完全重写以符合实际飞行原理
-    drawApproachPath(ctx, startX, startY, endX, endY, startHeading, finalHeading, clockwise) {
+    drawApproachPath(ctx, startX, startY, endX, endY, startHeading, finalHeading, clockwise, finalApproachDistance = 220) {
       try {
         // 清除之前的路径，开始一个新路径
         ctx.beginPath();
@@ -2377,7 +3219,6 @@ export default {
         
         // 确定进场点 - 跑道延长线上距离跑道一定距离的点
         // 问题2修复: 缩短直线进近航迹长度，从300像素减到100像素，大约是跑道长度的三分之一
-        const finalApproachDistance = 100; // 从300像素改为100像素，更符合游戏尺度
         const finalApproachX = runwayPos.x + Math.sin(oppRunwayAngle) * finalApproachDistance;
         const finalApproachY = runwayPos.y - Math.cos(oppRunwayAngle) * finalApproachDistance;
         const finalApproachPoint = { x: finalApproachX, y: finalApproachY };
@@ -2571,7 +3412,7 @@ export default {
       ctx.restore();
     },
     // 新增方法 - 更新进场飞行的飞机位置和航向 - 简化版本，确保可靠
-    updateApproachFlight(plane) {
+    updateApproachFlight(plane, dt) {
       try {
         // 检查是否有必要的路径数据
         if (!plane || !plane.approachPath) {
@@ -2599,13 +3440,8 @@ export default {
           return false;
         }
         
-        // 更新时间间隔
-        const now = Date.now();
-        const dt = Math.min((now - (path.lastUpdateTime || now)) / 1000, 0.1); 
-        path.lastUpdateTime = now;
-        
         // 获取原始速度并基于阶段计算实际使用的速度
-        const baseSpeed = path.originalSpeed || (0.2 * this.speedLevel);
+        const baseSpeed = path.originalSpeed || 0.2;
         
         // 根据进场阶段处理
         try {
@@ -2626,8 +3462,15 @@ export default {
               plane.speed = baseSpeed * path.speedFactor;
               
               // 累计移动的距离并计算进度
-              path.totalDistance = (path.totalDistance || 0) + plane.speed * dt * 60;
+              path.totalDistance = (path.totalDistance || 0) + getMovementDistance(plane.speed, dt);
               path.progressT = Math.min(path.totalDistance / path.curveLength, 1.0);
+              const initialTargetAirspeed = Math.round(220 - 20 * path.progressT);
+              plane.indicatedSpeed = getNextValue(
+                plane.indicatedSpeed || initialTargetAirspeed,
+                initialTargetAirspeed,
+                25,
+                dt,
+              );
               
               // 切换到最终阶段 - 这里是关键，当进入FINAL_APPROACH时需要调整速度
               if (path.progressT >= 1.0) {
@@ -2682,6 +3525,16 @@ export default {
               
               // 应用速度系数
               plane.speed = baseSpeed * path.speedFactor;
+              const airspeedRatio = path.initialDistanceToRunway > 0
+                ? Math.min(1, distToRunway / path.initialDistanceToRunway)
+                : 0.5;
+              const finalTargetAirspeed = Math.round(135 + 65 * airspeedRatio);
+              plane.indicatedSpeed = getNextValue(
+                plane.indicatedSpeed || finalTargetAirspeed,
+                finalTargetAirspeed,
+                25,
+                dt,
+              );
               
               // 设置飞机航向为跑道方向
               plane.heading = path.finalHeading;
@@ -2689,8 +3542,9 @@ export default {
               
               // 以当前速度移动
               const rad = (path.finalHeading * Math.PI) / 180;
-              plane.x += Math.sin(rad) * plane.speed;
-              plane.y += -Math.cos(rad) * plane.speed;
+              const movementDistance = getMovementDistance(plane.speed, dt);
+              plane.x += Math.sin(rad) * movementDistance;
+              plane.y += -Math.cos(rad) * movementDistance;
               
               // 定期记录调试信息
               if (Math.random() < 0.01) { // 平均每100帧记录一次
@@ -2698,26 +3552,8 @@ export default {
               }
               
               // 检查是否到达跑道入口
-              if (distToRunway < 20) {
-                // 进入着陆阶段
-                plane.state = "LANDING";
-                plane.x = path.runwayX;
-                plane.y = path.runwayY;
-                plane.runway = plane.landingRunway;
-                plane.landingStartTime = Date.now();
-                
-                // 关键修改：确保保存当前减速后的速度，而不是原始速度
-                // 这样可以避免落地时的突然加速
-                plane.originalSpeed = plane.speed; 
-                
-                // 确保记录的原始速度不会超过合理的值
-                const maxLandingSpeed = 0.4 * this.speedLevel;
-                if (plane.originalSpeed > maxLandingSpeed) {
-                  console.log(`${plane.id} 降落速度过高(${plane.originalSpeed.toFixed(2)})，调整为${maxLandingSpeed.toFixed(2)}`);
-                  plane.originalSpeed = maxLandingSpeed;
-                }
-                
-                plane.landingDirection = plane.landingRunway.startsWith("18") ? 180 : 0; // 设置着陆方向
+              if (distToRunway < this.touchdownCaptureDistance) {
+                this.beginLandingRoll(plane, path.runwayX, path.runwayY);
                 
                 // 发出着陆确认
                 const message = `${plane.id}, landing runway ${plane.landingRunway}`;
@@ -2816,7 +3652,7 @@ export default {
         if (!plane || !plane.approachPath) return;
         
         const path = plane.approachPath;
-        const speed = path.originalSpeed || plane.speed || 0.5;
+        const speed = path.originalSpeed || plane.speed || 0.2;
         
         // 向跑道方向移动
         const dx = path.runwayX - plane.x;
@@ -2839,79 +3675,121 @@ export default {
     },
     // 添加新方法，检查飞机是否已经离开跑道区域
     isAircraftOffRunway(plane) {
-      // 判断飞机是否已离开跑道区域
-        const x = plane.x;
-        const y = plane.y;
+      const runway = plane.runway ? this.runways.find(r => r.id === plane.runway) : null;
+      const strips = runway
+        ? [this.airport.physicalRunways.find(strip => strip.id === runway.strip)].filter(Boolean)
+        : this.airport.physicalRunways;
 
-      // 定义跑道区域范围（两条跑道公用的判断）
-      const isOnRunwayX = (x >= 800 && x <= 860) || (x >= 940 && x <= 1000);
-      const isOnRunwayY = y >= 430 && y <= 770;
-      
-      // 判断飞机航向
-      const heading = plane.heading;
-      const isFlyingNorth = (heading >= 330 || heading <= 30); // 向北飞行
-      const isFlyingSouth = (heading >= 150 && heading <= 210); // 向南飞行
-      
-      // 定义跑道出口区域（出了这个区域才算完全离开跑道）
-      const northExitY = 380; // 北侧出口
-      const southExitY = 820; // 南侧出口
-      
-      // 默认为已离开跑道
-      let isOffRunway = true;
-      
-      // 如果在跑道X坐标范围内，需进一步判断
-      if (isOnRunwayX) {
-        if (isFlyingNorth) {
-          // 向北起飞，必须超过北端跑道限制
-          isOffRunway = y < northExitY;
-          if (!isOffRunway) {
-            console.log(`${plane.id} 北向起飞中，尚未离开跑道安全区域 (y=${y.toFixed(1)}, 需小于${northExitY})`);
-          }
-        } else if (isFlyingSouth) {
-          // 向南起飞，必须超过南端跑道限制
-          isOffRunway = y > southExitY;
-          if (!isOffRunway) {
-            console.log(`${plane.id} 南向起飞中，尚未离开跑道安全区域 (y=${y.toFixed(1)}, 需大于${southExitY})`);
-          }
-        } else {
-          // 航向不明确，使用保守判断
-          isOffRunway = !isOnRunwayY;
-        }
+      const onRunway = strips.some(strip => this.isPointInsideRunwayStrip(plane.x, plane.y, strip, 35));
+      if (onRunway) {
+        console.log(`${plane.id} has not vacated the runway safety area`);
       }
-      
-      // 如果飞机确实离开了跑道，记录日志，但不发送通话信息
-      if (isOffRunway && isOnRunwayX) {
-        console.log(`${plane.id} 已离开跑道安全区域，可以接受指令`);
-      }
-      
-      return isOffRunway;
+      return !onRunway;
     },
-    
+
+    isPointInsideRunwayStrip(x, y, strip, margin = 0) {
+      const heading = strip.heading ?? 0;
+      const rad = heading * Math.PI / 180;
+      const axis = { x: Math.sin(rad), y: -Math.cos(rad) };
+      const perp = { x: Math.cos(rad), y: Math.sin(rad) };
+      const relX = x - strip.x;
+      const relY = y - strip.y;
+      const along = relX * axis.x + relY * axis.y;
+      const across = relX * perp.x + relY * perp.y;
+      return Math.abs(along) <= strip.length / 2 + margin && Math.abs(across) <= strip.width / 2 + margin;
+    },
+
+    getRunwayHeading(runwayId) {
+      const runway = this.runways.find(item => item.id === runwayId);
+      return runway ? runway.heading : 0;
+    },
+
+    calculateRunwayProgress(plane, runway, strip) {
+      if (!plane || !runway || !strip) return 0;
+
+      const runwayRad = runway.heading * Math.PI / 180;
+      const axis = { x: Math.sin(runwayRad), y: -Math.cos(runwayRad) };
+      const startProjection = (runway.startX - strip.x) * axis.x + (runway.startY - strip.y) * axis.y;
+      const planeProjection = (plane.x - strip.x) * axis.x + (plane.y - strip.y) * axis.y;
+      const traveled = Math.abs(planeProjection - startProjection);
+      return Math.max(0, Math.min(1, traveled / strip.length));
+    },
+
+    calculateBearing(fromX, fromY, toX, toY) {
+      const dx = toX - fromX;
+      const dy = toY - fromY;
+      return Math.round((Math.atan2(dx, -dy) * 180 / Math.PI + 360) % 360);
+    },
+
+    cleanupSpeechRecognition() {
+      if (!this.recognition) return;
+      try {
+        this.recognition.onresult = null;
+        this.recognition.onerror = null;
+        this.recognition.onend = null;
+        this.recognition.abort();
+      } catch (e) {
+        // Ignore stale browser recognition sessions.
+      }
+      this.recognition = null;
+    },
+
+    restartVoiceSession(sessionId) {
+      if (!this.isRecording || sessionId !== this.voiceSessionId) return;
+      if (this.voiceRestartTimeout) {
+        clearTimeout(this.voiceRestartTimeout);
+      }
+      this.voiceRestartTimeout = setTimeout(() => {
+        if (!this.isRecording || sessionId !== this.voiceSessionId || !this.recognition) return;
+        try {
+          this.recognition.start();
+          this.voiceStatusText = 'Transmitting...';
+        } catch (err) {
+          console.error('Failed to restart speech recognition:', err);
+          this.voiceStatusText = 'Mic restart failed';
+        }
+      }, 180);
+    },
+
+    commitVoiceCommand(command) {
+      const normalized = (command || '').trim();
+      if (!normalized || this.voiceHasFinalResult) return;
+      this.voiceHasFinalResult = true;
+      this.addToCommunicationLog(`TX: ${normalized}`);
+      this.processVoiceCommand(normalized);
+    },
+
+    flushPendingVoiceCommand() {
+      if (this.voiceCommitTimeout) {
+        clearTimeout(this.voiceCommitTimeout);
+        this.voiceCommitTimeout = null;
+      }
+
+      const commandToSend = this.pendingVoiceCommandText || this.voiceCommandText;
+      if (commandToSend?.trim()) {
+        this.commitVoiceCommand(commandToSend);
+        this.voiceStatusText = this.voiceHasFinalResult ? 'Command sent' : 'Hold left Shift to transmit';
+      } else {
+        this.voiceStatusText = 'No speech recognized';
+      }
+    },
+
     // 初始化语音识别 - 支持多语言
     initSpeechRecognition() {
       if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
         console.error('Browser does not support speech recognition');
+        this.voiceStatusText = 'Speech recognition unavailable';
         return;
       }
       
-      // 如果已存在识别对象，先清理
-      if (this.recognition) {
-        try {
-          this.recognition.onresult = null;
-          this.recognition.onerror = null;
-          this.recognition.onend = null;
-          this.recognition.abort();
-        } catch (e) {
-          // 忽略可能的错误
-        }
-      }
+      this.cleanupSpeechRecognition();
       
       // 创建语音识别对象
       const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
       this.recognition = new SpeechRecognition();
       
       // 配置语音识别 - 英文
-      this.recognition.continuous = true; // Enable continuous recognition
+      this.recognition.continuous = false;
       this.recognition.interimResults = true; // 显示中间结果
       this.recognition.lang = 'en-US'; // 使用英语
       this.recognition.maxAlternatives = 5; // 增加备选识别结果数量
@@ -2919,6 +3797,7 @@ export default {
       // 处理识别结果
       this.recognition.onresult = (event) => {
         const result = event.results[event.results.length - 1];
+        const sessionId = this.voiceSessionId;
         
         // 尝试找到最佳匹配结果
         let bestTranscript = "";
@@ -2938,7 +3817,7 @@ export default {
           }
           
           // 增加包含常见航空指令的权重 - 使用英文术语
-          const aviationTerms = ["heading", "turn", "left", "right", "runway", "cleared", "land", "takeoff"];
+          const aviationTerms = ["heading", "turn", "left", "right", "runway", "cleared", "land", "takeoff", "climb", "descend", "direct", "go around"];
             
           for (const term of aviationTerms) {
             if (transcript.toLowerCase().includes(term)) {
@@ -2956,30 +3835,17 @@ export default {
         let displayText = bestTranscript;
         displayText = displayText.replace(/\bbravo\b/gi, "B");
         this.voiceCommandText = displayText;
+        if (displayText.trim()) {
+          this.pendingVoiceCommandText = displayText;
+        }
         
-        // 如果是最终结果并且有意义的内容，处理语音指令
+        // Push-to-talk mode: final results are cached while Shift is held.
+        // The command is executed only when the transmit key is released.
         if (result.isFinal && displayText.trim() !== '') {
           console.log("Speech recognition result:", bestTranscript, "confidence:", highestConfidence);
-          this.processVoiceCommand(displayText);
-          
-          // In continuous mode, immediately restart recognition
-          if (this.continuousMode && this.isRecording) {
-            try {
-              this.recognition.stop(); // Stop the current session
-              
-              // Start a new session with slight delay to ensure clean restart
-              setTimeout(() => {
-                if (this.isRecording && this.continuousMode) {
-                  try {
-                    this.recognition.start();
-                  } catch (err) {
-                    console.error('Failed to restart continuous recognition:', err);
-                  }
-                }
-              }, 100);
-            } catch (err) {
-              console.error('Error restarting continuous recognition:', err);
-            }
+          this.voiceStatusText = 'Release Shift to send';
+          if (this.voiceStopRequested) {
+            this.flushPendingVoiceCommand();
           }
         }
       };
@@ -2988,12 +3854,12 @@ export default {
       this.recognition.onerror = (event) => {
         console.error('Speech recognition error:', event.error);
         
-        // Don't stop recording in continuous mode for no-speech errors
-        if (event.error === 'no-speech' && this.continuousMode) {
-          console.log('No speech detected, but continuing in continuous mode');
+        if ((event.error === 'no-speech' || event.error === 'aborted') && this.isRecording) {
+          this.voiceStatusText = event.error === 'no-speech' ? 'Listening...' : 'Transmission reset';
           return;
         }
         
+        this.voiceStatusText = `Mic error: ${event.error}`;
         this.isRecording = false;
       };
       
@@ -3001,47 +3867,36 @@ export default {
       this.recognition.onend = () => {
         console.log('Speech recognition ended');
         
-        // In continuous mode, restart recognition if it ends unexpectedly
-        if (this.continuousMode && this.isRecording) {
-          console.log('Restarting recognition in continuous mode');
-          try {
-            setTimeout(() => {
-              if (this.isRecording && this.continuousMode) {
-                try {
-                  this.recognition.start();
-                } catch (err) {
-                  console.error('Failed to restart continuous recognition:', err);
-                  this.isRecording = false;
-                }
-              }
-            }, 100);
-          } catch (err) {
-            console.error('Error in continuous recognition:', err);
-            this.isRecording = false;
-          }
+        if (this.isRecording && !this.voiceStopRequested && (this.continuousMode || this.shiftKeyPressed || this.spacePressHandled)) {
+          this.restartVoiceSession(this.voiceSessionId);
         } else {
-          // In normal mode or when explicitly stopped
-          if (this.voiceCommandText && this.voiceCommandText.trim() !== '' && !this.continuousMode) {
-            this.processVoiceCommand(this.voiceCommandText);
-          }
+          this.flushPendingVoiceCommand();
+          this.isRecording = false;
           
-          if (!this.continuousMode) {
-            this.isRecording = false;
+          if (this.voiceClearTimeout) {
+            clearTimeout(this.voiceClearTimeout);
           }
-          
-          // Clear display text after 5 seconds if not in continuous mode
-          if (!this.continuousMode) {
-            setTimeout(() => {
-              this.voiceCommandText = '';
-            }, 5000);
-          }
+          this.voiceClearTimeout = setTimeout(() => {
+            this.voiceCommandText = '';
+            this.voiceStatusText = 'Hold left Shift to transmit';
+          }, 5000);
         }
       };
     },
     
     // 开始语音命令 - 支持多语言
     startVoiceCommand(continuous = false) {
-      if (!this.recognition || this.gameStatus !== 'running' || this.isRecording) return;
+      if (this.gameStatus !== 'running' || this.isRecording) return;
+
+      if (this.testScenario === 'voice') {
+        this.isRecording = true;
+        this.voiceCommandText = 'B9001 turn right heading one eight zero';
+        this.pendingVoiceCommandText = this.voiceCommandText;
+        this.voiceHasFinalResult = false;
+        this.voiceStopRequested = false;
+        this.voiceStatusText = 'Release Shift to send';
+        return;
+      }
       
       // 防止频繁点击
       const now = Date.now();
@@ -3051,28 +3906,26 @@ export default {
       console.log('Starting recording...');
       this.isRecording = true;
       this.voiceCommandText = '';
+      this.pendingVoiceCommandText = '';
+      this.voiceHasFinalResult = false;
+      this.voiceStopRequested = false;
+      if (this.voiceCommitTimeout) {
+        clearTimeout(this.voiceCommitTimeout);
+        this.voiceCommitTimeout = null;
+      }
+      this.voiceSessionId += 1;
+      this.voiceStatusText = 'Transmitting...';
       this.continuousMode = continuous; // Store whether we're in continuous mode
       
       try {
-        // 确保之前的识别已结束
-        try {
-          this.recognition.stop();
-        } catch (e) {
-          // 忽略可能的错误
-        }
-        
         // 重新创建识别对象以确保干净的状态，并确保使用正确的语言
         this.initSpeechRecognition();
+        if (!this.recognition) {
+          this.isRecording = false;
+          return;
+        }
         
-        // 启动新的识别 - 增加延迟防止可能的性能问题
-        this.voiceRecognitionTimeout = setTimeout(() => {
-          try {
-            this.recognition.start();
-          } catch (startError) {
-            console.error('语音识别启动失败:', startError);
-            this.isRecording = false;
-          }
-        }, 150);
+        this.recognition.start();
       } catch (e) {
         console.error('Failed to start speech recognition:', e);
         this.isRecording = false;
@@ -3081,25 +3934,48 @@ export default {
     
     // 停止语音命令 - 确保可靠执行
     stopVoiceCommand() {
-      if (!this.isRecording) return;
+      if (!this.isRecording && !this.pendingVoiceCommandText && !this.voiceCommandText) return;
       
       console.log('停止录音...');
+      this.voiceStopRequested = true;
       
       // 清除可能的计时器
       if (this.voiceRecognitionTimeout) {
         clearTimeout(this.voiceRecognitionTimeout);
         this.voiceRecognitionTimeout = null;
       }
-      
+
+      if (this.voiceRestartTimeout) {
+        clearTimeout(this.voiceRestartTimeout);
+        this.voiceRestartTimeout = null;
+      }
+
+      // The interim text shown in the panel is already usable. Commit it at key
+      // release instead of waiting for a browser-specific final-result event.
+      if (this.pendingVoiceCommandText || this.voiceCommandText) {
+        this.flushPendingVoiceCommand();
+      }
+
       try {
-        this.recognition.stop();
+        if (this.recognition && this.testScenario !== 'voice') this.recognition.stop();
       } catch (e) {
         console.error('语音识别停止失败:', e);
+      }
+
+      if (!this.voiceHasFinalResult) {
+        this.voiceCommitTimeout = setTimeout(() => {
+          this.flushPendingVoiceCommand();
+        }, 600);
       }
       
       // 即使recognition.stop()失败也标记为已停止
       this.isRecording = false;
       this.continuousMode = false;
+      this.shiftKeyPressed = false;
+      this.spacePressHandled = false;
+      this.voiceStatusText = this.voiceHasFinalResult
+        ? 'Command sent'
+        : (this.pendingVoiceCommandText || this.voiceCommandText ? 'Sending command...' : 'Hold left Shift to transmit');
     },
     
     // 处理语音指令 - 支持多语言
@@ -3118,8 +3994,8 @@ export default {
       console.log(isEnglish ? 'Received voice command:' : 'Received voice command:', command);
       
       try {
-        // 预处理和规范化命令
-        let processedCommand = command.toLowerCase().trim();
+        // 预处理和规范化命令，兼容浏览器识别出的英文数字词
+        let processedCommand = normalizeVoiceCommand(command);
         
         
         // 标准陆空通话用语替换 - 仅保留规范用语
@@ -3219,8 +4095,8 @@ export default {
         let targetPlaneId = null;
         let instruction = normalizedCommand;
         
-        // 识别航班号 - 提取4位数字
-        const digitPattern = /\b(\d{4})\b/g;
+        // 识别航班号 - 支持 "bravo 1234"、"B1234"、"1234"
+        const digitPattern = /(?:\bb\s*)?(\d{4})\b/gi;
         const digitMatches = [...normalizedCommand.matchAll(digitPattern)];
         
         if (digitMatches.length > 0) {
@@ -3253,6 +4129,17 @@ export default {
         }
 
         if (!targetPlaneId) {
+          const controllablePlanes = this.airplanes.filter(item =>
+            ["FLYING", "APPROACH", "FINAL_APPROACH", "TAKEOFF", "READY_FOR_TAKEOFF"].includes(item.state)
+          );
+          if (controllablePlanes.length === 1) {
+            targetPlaneId = controllablePlanes[0].id;
+            console.log(`Only one controllable aircraft, using ${targetPlaneId}`);
+          }
+        }
+
+        if (!targetPlaneId) {
+          this.addToCommunicationLog(`RX: ${normalizedCommand}`);
           this.addToCommunicationLog(isEnglish 
             ? "No target aircraft specified, please select an aircraft or include a flight number in your command"
             : "No target aircraft specified, please select an aircraft or include a flight number in your command");
@@ -3262,9 +4149,11 @@ export default {
         // 查找对应的飞机
         const plane = this.getPlaneById(targetPlaneId);
         if (!plane) {
+          const activeIds = this.airplanes.map(item => item.id).join(", ") || "none";
+          this.addToCommunicationLog(`RX: ${normalizedCommand}`);
           this.addToCommunicationLog(isEnglish 
-            ? `Flight ${targetPlaneId} not found`
-            : `Flight ${targetPlaneId} not found`);
+            ? `Flight ${targetPlaneId} not found. Active aircraft: ${activeIds}`
+            : `Flight ${targetPlaneId} not found. Active aircraft: ${activeIds}`);
           return;
         }
         
@@ -3273,94 +4162,46 @@ export default {
           this.selectPlane(plane);
         }
         
-        // 提取指令部分 - 移除航班号
-        instruction = normalizedCommand.replace(new RegExp(`\\b${targetPlaneId}\\b`, 'i'), '').trim();
+        // 提取指令部分 - 移除航班号前缀和四位数字，避免把航班号误判成航向
+        const targetDigits = targetPlaneId.replace(/\D/g, '');
+        instruction = normalizedCommand
+          .replace(new RegExp(`\\b${targetPlaneId}\\b`, 'i'), '')
+          .replace(new RegExp(`\\bb\\s*${targetDigits}\\b`, 'i'), '')
+          .replace(new RegExp(`\\b${targetDigits}\\b`, 'i'), '')
+          .trim();
         console.log(`分离出指令部分: "${instruction}"`);
         
         // 检查是否是落地相关指令
         const isLandingCommand = isEnglish 
           ? instruction.includes('land') || instruction.includes('landing')
           : instruction.includes('着陆') || instruction.includes('落地');
+        const isGoAroundCommand = isEnglish
+          ? instruction.includes('go around') || instruction.includes('missed approach') || instruction.includes('abort landing') || instruction.includes('cancel landing')
+          : instruction.includes('复飞') || instruction.includes('中止着陆') || instruction.includes('取消着陆');
+
+        if (isGoAroundCommand) {
+          this.processGoAroundCommand(targetPlaneId);
+          return;
+        }
           
         // 如果飞机正在进场落地但收到的不是落地指令，取消当前的落地进程
-        if (plane.state === "FINAL_APPROACH" && !isLandingCommand) {
+        if ((plane.state === "FINAL_APPROACH" || plane.state === "LANDING") && !isLandingCommand) {
           console.log(`${targetPlaneId} is in final approach, received non-landing command "${instruction}", canceling landing command`);
-          
-          // 标记飞机已收到新命令，确保在下一帧更新时取消进场
-          plane.newCommandIssued = true;
-          
-          // 修改：不要现在就设置为APPROACH状态，让newCommandIssued处理
-          // 在下一个更新循环中会处理这个标记，将状态设置为FLYING
-          // plane.state = "APPROACH";
-          // plane.approachPath = null;
-          // plane.approachPathCreated = false;
-          // plane.landingRunway = null;
-          
-          // 通知用户
-          this.addToCommunicationLog(isEnglish 
-            ? `${targetPlaneId}, landing approach canceled`
-            : `${targetPlaneId}, landing approach canceled`);
+          this.initiateMissedApproach(plane, { preserveHeading: true, log: true });
         }
         
         // ===== 严格的标准陆空通话指令识别 =====
         console.log(`分析指令: "${instruction}"`);
         
         // 1. 检查起飞指令
-        if (isEnglish) {
-          if (instruction.includes('take off')) {
-            // 尝试提取跑道号
-            const runwayMatch = instruction.match(/runway\s+(\d+)\s*([lr])/i);
-            let runwayId = null;
-            
-            if (runwayMatch) {
-              runwayId = runwayMatch[1] + runwayMatch[2].toUpperCase();
-            }
-            
-            console.log("Identified as takeoff command" + (runwayId ? `, runway ${runwayId}` : ""));
-            
-            // 标记飞机收到新命令，确保在下一帧取消进场
-            const targetPlane = this.getPlaneById(targetPlaneId);
-            if (targetPlane) {
-              targetPlane.newCommandIssued = true;
-            }
-            
-              targetPlane.newCommandIssued = true;
-              this.processTakeoffCommand(targetPlaneId, instruction);
-            } else {
-              console.warn(`起飞指令目标飞机 ${targetPlaneId} 不存在`);
-              this.addToCommunicationLog(isEnglish
-                ? `Aircraft ${targetPlaneId} not found`
-                : `Aircraft ${targetPlaneId} not found`);
-            
-          }
-        } else {
-          if (instruction.includes('起飞')) {
-            // 尝试提取跑道号
-            const runwayMatch = instruction.match(/跑道\s*(\d+)\s*([左右])/i);
-            let runwayId = null;
-            
-            if (runwayMatch) {
-              const direction = runwayMatch[2] === "左" ? "L" : "R";
-              runwayId = runwayMatch[1] + direction;
-            }
-            
-            console.log("Identified as takeoff command" + (runwayId ? `, runway ${runwayId}` : ""));
-            
-            // 标记飞机收到新命令，确保在下一帧取消进场
-            const targetPlane = this.getPlaneById(targetPlaneId);
-            if (targetPlane) {
-              targetPlane.newCommandIssued = true;
-            }
-            
-              targetPlane.newCommandIssued = true;
-              this.processTakeoffCommand(targetPlaneId, instruction);
-            } else {
-              console.warn(`起飞指令目标飞机 ${targetPlaneId} 不存在`);
-              this.addToCommunicationLog(isEnglish
-                ? `Aircraft ${targetPlaneId} not found`
-                : `Aircraft ${targetPlaneId} not found`);
-            
-          }
+        const isTakeoffCommand = isEnglish
+          ? instruction.includes('take off')
+          : instruction.includes('起飞');
+
+        if (isTakeoffCommand) {
+          console.log("Identified as takeoff command");
+          this.processTakeoffCommand(targetPlaneId, instruction);
+          return;
         }
         
         // 2. 检查着陆指令
@@ -3372,7 +4213,6 @@ export default {
           // 确认飞机存在并标记新命令
           const targetPlane = this.getPlaneById(targetPlaneId);
           if (targetPlane) {
-            targetPlane.newCommandIssued = true;
             this.processLandingCommand(targetPlaneId, instruction);
           } else {
             console.warn(`着陆指令目标飞机 ${targetPlaneId} 不存在`);
@@ -3382,8 +4222,50 @@ export default {
           }
           return;
         }
+
+        // 3. 检查离场程序/SID 指令
+        const isProcedureCommand = isEnglish
+          ? instruction.includes('sid') || instruction.includes('departure') || instruction.includes('via')
+          : instruction.includes('离场') || instruction.includes('程序');
+
+        if (isProcedureCommand) {
+          const procedureId = extractProcedureId(instruction, this.departureProcedures, plane.runway);
+          if (procedureId) {
+            console.log(`Identified as departure procedure command: ${procedureId}`);
+            this.processDepartureProcedureCommand(targetPlaneId, procedureId);
+            return;
+          }
+        }
+
+        // 4. 检查直飞导航台指令
+        const isDirectCommand = isEnglish
+          ? instruction.includes('direct') || instruction.includes('proceed')
+          : instruction.includes('直飞') || instruction.includes('导航台');
+
+        if (isDirectCommand) {
+          const beaconId = extractBeaconId(instruction, this.navBeacons.map(beacon => beacon.id));
+          if (beaconId) {
+            console.log(`Identified as direct-to command: ${beaconId}`);
+            this.processDirectToBeaconCommand(targetPlaneId, beaconId);
+            return;
+          }
+        }
+
+        // 5. 检查高度指令
+        const isAltitudeCommand = isEnglish
+          ? instruction.includes('altitude') || instruction.includes('climb') || instruction.includes('descend') || instruction.includes('flight level') || instruction.includes('level')
+          : instruction.includes('高度') || instruction.includes('上升') || instruction.includes('下降');
+
+        if (isAltitudeCommand) {
+          const altitude = extractAltitude(instruction);
+          if (altitude !== null) {
+            console.log(`Identified as altitude command: ${altitude}`);
+            this.processAltitudeCommand(targetPlaneId, altitude);
+            return;
+          }
+        }
         
-        // 3. 检查航向指令
+        // 6. 检查航向指令
         let isHeadingCommand = false;
         let turnDirection = null;
         
@@ -3395,7 +4277,7 @@ export default {
           } else if (instruction.includes('turn right')) {
             turnDirection = 'right';
             isHeadingCommand = true;
-          } else if (instruction.includes('heading')) {
+          } else if (instruction.includes('heading') || instruction.includes('head')) {
             isHeadingCommand = true;
           }
         } else {
@@ -3413,16 +4295,13 @@ export default {
         
         if (isHeadingCommand) {
           // 尝试提取航向数字
-          const headingMatch = instruction.match(/\b(\d{1,3})\b/);
-          if (headingMatch) {
-            const heading = parseInt(headingMatch[1]);
-            if (heading >= 0 && heading <= 360) {
+          const heading = extractHeading(instruction);
+          if (heading !== null) {
               console.log(`Identified as heading command: ${heading}°, turn direction: ${turnDirection || "auto"}`);
               
               // 标记飞机收到新命令，确保在下一帧取消进场
               const targetPlane = this.getPlaneById(targetPlaneId);
               if (targetPlane) {
-                targetPlane.newCommandIssued = true;
                 this.processHeadingCommand(targetPlaneId, instruction);
               } else {
                 console.warn(`航向指令目标飞机 ${targetPlaneId} 不存在`);
@@ -3431,11 +4310,12 @@ export default {
                   : `Aircraft ${targetPlaneId} not found`);
               }
               return;
-            }
           }
         }
         
         // 未识别的指令
+        this.addToCommunicationLog(`RX: ${normalizedCommand}`);
+        this.addToCommunicationLog(`Decoded instruction: "${instruction || '(empty)'}"`);
         this.addToCommunicationLog(isEnglish 
           ? `Command not recognized. Use standard ATC phrases like "turn heading 180" or "cleared to land runway 36L"`
           : `Command not recognized. Use standard ATC phrases like "turn heading 180" or "cleared to land runway 36L"`);
@@ -3464,23 +4344,10 @@ export default {
           return;
         }
         
-        // 如果飞机正在进场落地，取消落地指令并恢复到正常航行状态
-        if (plane.state === "FINAL_APPROACH") {
+        // 如果飞机正在进场落地，航向指令相当于中止进近后复飞转向。
+        if (plane.state === "FINAL_APPROACH" || plane.state === "LANDING") {
           console.log(`${planeId} is in final approach, canceling landing command and returning to normal flight state`);
-          
-          // 标记飞机收到新命令，确保在下一帧更新时取消进场
-          plane.newCommandIssued = true;
-          
-          // 清除进场路径数据
-          plane.state = "APPROACH";
-          plane.approachPath = null;
-          plane.approachPathCreated = false;
-          plane.landingRunway = null;
-          
-          // 通知用户
-          this.addToCommunicationLog(isEnglish 
-            ? `${planeId}, landing approach canceled`
-            : `${planeId}，取消进场着陆`);
+          this.initiateMissedApproach(plane, { preserveHeading: true, log: true });
         }
         
         // 提取目标航向
@@ -3490,18 +4357,18 @@ export default {
         // 标准陆空通话用语格式的航向指令
         if (isEnglish) {
           // 英文标准格式: "turn left/right heading XXX"
-          const leftTurnMatch = command.match(/turn\s+left\s+heading\s+(\d{1,3})/i);
-          const rightTurnMatch = command.match(/turn\s+right\s+heading\s+(\d{1,3})/i);
-          const headingMatch = command.match(/heading\s+(\d{1,3})/i);
+          const leftTurnMatch = command.match(/turn\s+left\b/i);
+          const rightTurnMatch = command.match(/turn\s+right\b/i);
+          const heading = extractHeading(command);
           
-          if (leftTurnMatch) {
-            targetHeading = parseInt(leftTurnMatch[1]);
+          if (heading !== null && leftTurnMatch) {
+            targetHeading = heading;
             turnDirection = 'left';
-          } else if (rightTurnMatch) {
-            targetHeading = parseInt(rightTurnMatch[1]);
+          } else if (heading !== null && rightTurnMatch) {
+            targetHeading = heading;
             turnDirection = 'right';
-          } else if (headingMatch) {
-            targetHeading = parseInt(headingMatch[1]);
+          } else if (heading !== null) {
+            targetHeading = heading;
           }
         } else {
           // 中文标准格式: "左转/右转航向XXX"
@@ -3557,7 +4424,16 @@ export default {
         
         // 设置飞机的目标航向
         plane.targetHeading = targetHeading;
-        plane.state = plane.state === 'HOLDING' ? 'HOLDING' : 'FLYING';
+        plane.targetBeaconId = null;
+        plane.targetBeaconX = undefined;
+        plane.targetBeaconY = undefined;
+        plane.departureProcedure = null;
+        plane.departureProcedureWaypointIndex = 0;
+        if (plane.state === "TAKEOFF") {
+          plane.targetAltitude = Math.max(plane.targetAltitude || 0, 5000);
+        } else {
+          plane.state = plane.state === 'HOLDING' ? 'HOLDING' : 'FLYING';
+        }
         
         // 添加到通信日志并播报
         const message = isEnglish
@@ -3572,6 +4448,150 @@ export default {
         this.addToCommunicationLog(isEnglish
           ? `Error processing heading command for ${planeId}`
           : `Error processing heading command for ${planeId}`);
+      }
+    },
+
+    processDirectToBeaconCommand(planeId, beaconId) {
+      console.log(`处理直飞导航台指令: ${planeId} direct ${beaconId}`);
+
+      try {
+        const plane = this.getPlaneById(planeId);
+        if (!plane) {
+          this.addToCommunicationLog(`${planeId} not found`);
+          return;
+        }
+
+        const beacon = this.navBeacons.find(item => item.id.toUpperCase() === beaconId.toUpperCase());
+        if (!beacon) {
+          this.addToCommunicationLog(`Navigation beacon ${beaconId} not found`);
+          return;
+        }
+
+        if (plane.state === "READY_FOR_TAKEOFF") {
+          this.addToCommunicationLog(`${planeId}, direct ${beacon.id} unavailable until airborne`);
+          return;
+        }
+
+        if (plane.state === "TAKEOFF" && !this.isAircraftOffRunway(plane)) {
+          this.addToCommunicationLog(`${planeId}, maintain runway heading until clear of runway`);
+          return;
+        }
+
+        this.resetApproachOrLandingState(plane);
+
+        plane.targetBeaconId = beacon.id;
+        plane.targetBeaconX = beacon.x;
+        plane.targetBeaconY = beacon.y;
+        plane.departureProcedure = null;
+        plane.departureProcedureWaypointIndex = 0;
+        plane.targetHeading = this.calculateBearing(plane.x, plane.y, beacon.x, beacon.y);
+        plane.forcedTurnDirection = null;
+        plane.preferredTurnDirection = null;
+        if (plane.state !== "TAKEOFF") {
+          plane.state = "FLYING";
+          plane.targetMotionSpeed = 0.2;
+          plane.targetIndicatedSpeed = 250;
+        }
+
+        this.speak(`${planeId}, proceed direct ${beacon.id}`);
+      } catch (error) {
+        console.error('Error processing direct-to beacon command:', error);
+        this.addToCommunicationLog(`Error processing direct ${beaconId} for ${planeId}`);
+      }
+    },
+
+    processDepartureProcedureCommand(planeId, procedureId) {
+      console.log(`处理离场程序指令: ${planeId} via ${procedureId}`);
+
+      try {
+        const plane = this.getPlaneById(planeId);
+        if (!plane) {
+          this.addToCommunicationLog(`${planeId} not found`);
+          return;
+        }
+
+        const procedure = this.departureProcedures.find(item => item.id.toUpperCase() === procedureId.toUpperCase());
+        if (!procedure) {
+          this.addToCommunicationLog(`Departure procedure ${procedureId} not found`);
+          return;
+        }
+
+        if (plane.runway && !plane.runway.startsWith(procedure.runwayPrefix)) {
+          this.addToCommunicationLog(`${procedure.id} is not valid from runway ${plane.runway}`);
+          return;
+        }
+
+        if (plane.state === "FINAL_APPROACH" || plane.state === "LANDING") {
+          this.resetApproachOrLandingState(plane);
+        }
+
+        plane.departureProcedure = {
+          ...procedure,
+          points: procedure.points.map(point => ({ ...point })),
+        };
+        plane.departureProcedureWaypointIndex = 0;
+        plane.targetBeaconId = null;
+        plane.targetBeaconX = undefined;
+        plane.targetBeaconY = undefined;
+        plane.forcedTurnDirection = null;
+        plane.preferredTurnDirection = null;
+
+        if (plane.state !== "READY_FOR_TAKEOFF" && plane.state !== "TAKEOFF") {
+          plane.state = "FLYING";
+          plane.targetMotionSpeed = 0.2;
+          plane.targetIndicatedSpeed = 250;
+        }
+
+        this.updateDepartureProcedureHeading(plane);
+        this.speak(`${planeId}, cleared via ${procedure.id}`);
+      } catch (error) {
+        console.error('Error processing departure procedure command:', error);
+        this.addToCommunicationLog(`Error processing ${procedureId} for ${planeId}`);
+      }
+    },
+
+    processGoAroundCommand(planeId) {
+      try {
+        const plane = this.getPlaneById(planeId);
+        if (!plane) {
+          this.addToCommunicationLog(`${planeId} not found`);
+          return;
+        }
+
+        if (!["APPROACH", "FINAL_APPROACH", "LANDING"].includes(plane.state) && !plane.landingRunway) {
+          this.addToCommunicationLog(`${planeId}, go around unavailable outside approach`);
+          return;
+        }
+
+        this.initiateMissedApproach(plane, { log: false });
+        this.speak(`${planeId}, go around, climb ${plane.targetAltitude}`);
+      } catch (error) {
+        console.error('Error processing go-around command:', error);
+        this.addToCommunicationLog(`Error processing go around for ${planeId}`);
+      }
+    },
+
+    processAltitudeCommand(planeId, altitude) {
+      try {
+        const plane = this.getPlaneById(planeId);
+        if (!plane) {
+          this.addToCommunicationLog(`${planeId} not found`);
+          return;
+        }
+
+        if (plane.state === "READY_FOR_TAKEOFF") {
+          this.addToCommunicationLog(`${planeId}, altitude instruction unavailable while holding on ground`);
+          return;
+        }
+
+        const safeAltitude = Math.max(0, Math.min(45000, Math.round(altitude / 100) * 100));
+        plane.targetAltitude = safeAltitude;
+        const currentAltitude = plane.altitude || 0;
+        const verb = safeAltitude > currentAltitude + 100 ? "climb" : safeAltitude < currentAltitude - 100 ? "descend" : "maintain";
+        this.speak(`${planeId}, ${verb} altitude ${safeAltitude}`);
+      } catch (error) {
+        console.error('Error processing altitude command:', error);
+        this.addToCommunicationLog(`Error processing altitude command for ${planeId}`);
       }
     },
     
@@ -3599,11 +4619,7 @@ export default {
         // 提取跑道号 - 只支持标准格式
         let runwayId = null;
         if (isEnglish) {
-          // 英文标准格式: "land runway 36L"
-          const runwayMatch = command.match(/runway\s+(\d{2})([LRCrlc]?)/i);
-          if (runwayMatch) {
-            runwayId = runwayMatch[1] + (runwayMatch[2] ? runwayMatch[2].toUpperCase() : '');
-          }
+          runwayId = extractRunwayId(command);
         } else {
           // 中文标准格式: "着陆跑道36左"
           const runwayMatch = command.match(/跑道\s*(\d{2})([左右中]?)/i);
@@ -3643,39 +4659,26 @@ export default {
         // 设置飞机状态为进场
         plane.state = "APPROACH";
         plane.landingRunway = runwayId;
-        
-        // 设置进场路径的终点（跑道入口）
-        const runwayEntranceX = runwayEntrance.x;
-        const runwayEntranceY = runwayEntrance.y;
+        plane.targetAltitude = Math.min(plane.targetAltitude || plane.altitude || 3000, 3000);
+        plane.missedApproachActive = false;
+        plane.targetBeaconId = null;
+        plane.targetBeaconX = undefined;
+        plane.targetBeaconY = undefined;
+        plane.departureProcedure = null;
+        plane.departureProcedureWaypointIndex = 0;
         
         // 创建进场路径 - 使用贝塞尔曲线
         try {
-          // 检查飞机是否在跑道入口附近
-          const isNearRunwayEntrance = this.checkNearRunwayEntrance(plane, runwayId);
-          
-          if (isNearRunwayEntrance) {
-            // 如果已经在跑道入口附近，直接设置为最终进场状态
-            console.log(`${planeId}已在跑道${runwayId}入口附近，直接设置为最终进场状态`);
-            plane.state = "FINAL_APPROACH";
-            plane.targetHeading = runway.heading;
-            
-            // 添加到通信日志并播报
-            const message = isEnglish
-              ? `${planeId}, cleared to land runway ${runwayId}`
-              : `${planeId}，着陆跑道${runwayId}`;
-            
-            this.speak(message);
-          } else {
-            // 计算进场路径
-            this.createApproachPath(plane, runway);
-            
-            // 添加到通信日志并播报
-            const message = isEnglish
-              ? `${planeId}, cleared to land runway ${runwayId}`
-              : `${planeId}，着陆跑道${runwayId}`;
-            
-            this.speak(message);
-          }
+          // Always create a complete path. The former near-threshold shortcut put
+          // the aircraft in FINAL_APPROACH without an approachPath, so it could
+          // fly through the runway and never enter the landing roll.
+          this.calculateApproachPath(plane);
+
+          const message = isEnglish
+            ? `${planeId}, cleared to land runway ${runwayId}`
+            : `${planeId}，着陆跑道${runwayId}`;
+
+          this.speak(message);
         } catch (error) {
           console.error('创建进场路径时出错:', error);
           this.addToCommunicationLog(isEnglish
@@ -3692,60 +4695,14 @@ export default {
     
     // 获取跑道入口坐标
     getRunwayEntrance(runway) {
-      // 根据跑道朝向确定入口位置
-      if (runway.heading === 0) {  // 朝北跑道 (36L/36R)
-        return { x: runway.startX, y: runway.startY - 50 };
-      } else if (runway.heading === 180) {  // 朝南跑道 (18L/18R)
-        return { x: runway.startX, y: runway.startY + 50 };
-      }
-      return null;
+      if (!runway) return null;
+      return { x: runway.startX, y: runway.startY };
     },
     
     // 创建进场路径
     createApproachPath(plane, runway) {
-      // 定义跑道入口
-      const entrance = this.getRunwayEntrance(runway);
-      
-      // 设置进场路径
-      const startX = plane.x;
-      const startY = plane.y;
-      const endX = entrance.x;
-      const endY = entrance.y;
-      
-      // 基于飞机位置和跑道方向计算贝塞尔曲线控制点
-      // 控制点1：飞机当前位置朝目标方向的初始控制点
-      // 控制点2：跑道入口前的最终控制点，与跑道方向对齐
-      const deltaX = endX - startX;
-      const deltaY = endY - startY;
-      const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-      
-      // 计算标准化方向向量
-      const dirX = deltaX / distance;
-      const dirY = deltaY / distance;
-      
-      // 控制点1：沿飞机当前航向的点
-      const planeHeadingRad = plane.heading * Math.PI / 180;
-      const control1X = startX + Math.sin(planeHeadingRad) * distance * 0.3;
-      const control1Y = startY - Math.cos(planeHeadingRad) * distance * 0.3;
-      
-      // 控制点2：根据跑道方向设置的进近点
-      const runwayHeadingRad = runway.heading * Math.PI / 180;
-      const control2X = endX - Math.sin(runwayHeadingRad) * 150;
-      const control2Y = endY + Math.cos(runwayHeadingRad) * 150;
-      
-      // 创建贝塞尔曲线路径
-      plane.approachPath = {
-        start: { x: startX, y: startY },
-        control1: { x: control1X, y: control1Y },
-        control2: { x: control2X, y: control2Y },
-        end: { x: endX, y: endY }
-      };
-      
-      // 设置进场状态
-      plane.state = "APPROACH";
-      plane.approachPathCreated = true;
-      
-      console.log(`已为${plane.id}创建到跑道${runway.id}的进场路径`);
+      plane.landingRunway = runway.id;
+      this.calculateApproachPath(plane);
     },
     
     // 处理起飞指令 - 支持多语言和语音识别
@@ -3761,23 +4718,11 @@ export default {
           return;
         }
         
-        // 如果飞机正在进场落地，取消落地指令并恢复到正常航行状态
-        if (plane.state === "FINAL_APPROACH") {
+        // 如果飞机正在进场落地，起飞指令不可直接执行，先按复飞处理。
+        if (plane.state === "FINAL_APPROACH" || plane.state === "LANDING") {
           console.log(`${planeId} 正在进场落地，取消落地指令并恢复到正常航行状态`);
-          
-          // 标记飞机收到新命令，确保在下一帧更新时取消进场
-          plane.newCommandIssued = true;
-          
-          // 清除进场路径数据
-          plane.state = "APPROACH";
-          plane.approachPath = null;
-          plane.approachPathCreated = false;
-          plane.landingRunway = null;
-          
-          // 通知用户
-          this.addToCommunicationLog(isEnglish 
-            ? `${planeId}, landing approach canceled`
-            : `${planeId}，取消进场着陆`);
+          this.initiateMissedApproach(plane, { log: true });
+          return;
         }
         
         // 提取跑道号
@@ -3785,11 +4730,7 @@ export default {
         
         // 从指令中提取跑道号 - 标准格式
         if (isEnglish) {
-          // 英文标准格式："take off runway 36L"
-          const runwayMatch = command.match(/runway\s+(\d{2})([LRCrlc]?)/i);
-          if (runwayMatch) {
-            runwayId = runwayMatch[1] + (runwayMatch[2] ? runwayMatch[2].toUpperCase() : '');
-          }
+          runwayId = extractRunwayId(command);
         } else {
           // 中文标准格式："起飞跑道36左"
           const runwayMatch = command.match(/跑道\s*(\d{2})([左右中]?)/i);
@@ -3831,6 +4772,15 @@ export default {
           plane.targetHeading = runway.heading;
           plane.state = 'READY_FOR_TAKEOFF';
           plane.runway = runway.id;
+          plane.altitude = 0;
+          plane.targetAltitude = Math.max(plane.targetAltitude || 0, 5000);
+          plane.targetBeaconId = null;
+          plane.targetBeaconX = undefined;
+          plane.targetBeaconY = undefined;
+          if (plane.departureProcedure && !runway.id.startsWith(plane.departureProcedure.runwayPrefix)) {
+            plane.departureProcedure = null;
+            plane.departureProcedureWaypointIndex = 0;
+          }
           
           // 如果状态改变，更新队列
           if (!wasReadyForTakeoff) {
@@ -3854,7 +4804,10 @@ export default {
           
           // 状态从READY_FOR_TAKEOFF变为TAKEOFF
           plane.state = 'TAKEOFF';
-          plane.speed = 0.2 * this.speedLevel; // 使用与进场飞机相同的速度
+          plane.speed = 0.04;
+          plane.targetMotionSpeed = 0.22;
+          plane.indicatedSpeed = 80;
+          plane.targetAltitude = Math.max(plane.targetAltitude || 0, 5000);
           
           // 从队列中移除并更新队列
           delete plane.queuePosition;
@@ -3889,25 +4842,17 @@ export default {
           return;
         }
         
-        // 获取跑道入口信息
-        const entrances = {
-          "18L": { x: 970, y: 430 },
-          "18R": { x: 830, y: 430 },
-          "36L": { x: 830, y: 770 },
-          "36R": { x: 970, y: 770 }
-        };
-        
-        // 确保进场计算有效
-        if (!entrances[plane.landingRunway]) {
+        const runway = this.runways.find(item => item.id === plane.landingRunway);
+        const entrance = runway ? this.getRunwayEntrance(runway) : null;
+
+        if (!runway || !entrance) {
           console.error(`无效的跑道标识: ${plane.landingRunway}`);
           return;
         }
-        
-        // 获取跑道入口和跑道方向
-        const entrance = entrances[plane.landingRunway];
+
         const entranceX = entrance.x;
         const entranceY = entrance.y;
-        const finalHeading = plane.landingRunway.startsWith("18") ? 180 : 0;
+        const finalHeading = runway.heading;
         
         // 获取当前飞机信息
         const startX = plane.x;
@@ -3936,7 +4881,8 @@ export default {
           shouldTurnClockwise: shouldTurnClockwise,
           landingApproach: true,
           runwayEntrance: entrance,
-          runwayId: plane.landingRunway
+          runwayId: plane.landingRunway,
+          finalApproachDistance: getFinalApproachDistance(plane.altitude),
         };
         
         // 使用简化的贝塞尔曲线控制点计算
@@ -3947,7 +4893,7 @@ export default {
         const oppRunwayAngle = ((finalHeading + 180) % 360) * Math.PI / 180;
         
         // 简化：最终进近点 - 跑道延长线上的点
-        const finalApproachDistance = 100;
+        const finalApproachDistance = getFinalApproachDistance(plane.altitude);
         const finalApproachX = entranceX + Math.sin(oppRunwayAngle) * finalApproachDistance;
         const finalApproachY = entranceY - Math.cos(oppRunwayAngle) * finalApproachDistance;
         
@@ -3986,6 +4932,9 @@ export default {
           progressT: 0,
           lastUpdateTime: Date.now(),
           originalSpeed: plane.speed,
+          startAltitude: plane.altitude ?? plane.targetAltitude ?? 3000,
+          finalGateAltitude: 1200,
+          thresholdCrossingAltitude: 50,
           
           // 添加初始速度因子设置，确保曲线段使用合适的速度
           speedFactor: 1.0,
@@ -3999,6 +4948,8 @@ export default {
           )
         };
         
+        plane.state = "FINAL_APPROACH";
+
         // 确保更新方法知道如何处理这个飞机
         plane.approachPathCreated = true;
         
@@ -4035,49 +4986,52 @@ export default {
       });
     },
     // 处理键盘按下事件
-    handleKeyDown(event) {
-      // 如果是空格键且游戏正在运行，启动语音识别
-      if (event.code === 'Space' && this.gameStatus === 'running' && !this.spacePressHandled) {
-        // 防止默认行为（页面滚动）
+    handleGlobalKeyDown(event) {
+      const isLeftShift = event.code === 'ShiftLeft' || (event.keyCode === 16 && event.location === 1);
+      if (isLeftShift && this.gameStatus === 'running') {
         event.preventDefault();
-        
-        // 标记空格键已处理，防止重复触发
+        if (!this.shiftKeyPressed) {
+          this.shiftKeyPressed = true;
+          this.startVoiceCommand(false);
+        }
+        return;
+      }
+
+      // 空格键保留为备用通话键
+      if (event.code === 'Space' && this.gameStatus === 'running' && !this.spacePressHandled) {
+        event.preventDefault();
         this.spacePressHandled = true;
-        
-        // 启动语音识别
-        this.startVoiceCommand();
+        this.startVoiceCommand(false);
       }
     },
     
     // 处理键盘释放事件
-    handleKeyUp(event) {
-      // 如果是空格键且正在录音，停止语音识别
-      if (event.code === 'Space' && this.isRecording) {
+    handleGlobalKeyUp(event) {
+      const isLeftShift = event.code === 'ShiftLeft' || (event.keyCode === 16 && event.location === 1);
+      if (isLeftShift) {
+        event.preventDefault();
+        this.shiftKeyPressed = false;
+        this.stopVoiceCommand();
+        return;
+      }
+
+      if (event.code === 'Space') {
         event.preventDefault();
         this.spacePressHandled = false;
         this.stopVoiceCommand();
       }
     },
+    handleKeyDown(event) {
+      this.handleGlobalKeyDown(event);
+    },
+    handleKeyUp(event) {
+      this.handleGlobalKeyUp(event);
+    },
     onKeyDown(event) {
-      // 检查是否是左Shift键 (16是Shift键的keyCode)
-      if (event.keyCode === 16 && event.location === 1) { // location 1表示左Shift
-        // 防止事件重复触发
-        if (!this.shiftKeyPressed) {
-          this.shiftKeyPressed = true;
-          this.startVoiceCommand(true); // Pass true to indicate continuous mode
-        }
-        // 防止触发浏览器默认行为
-        event.preventDefault();
-      }
+      this.handleGlobalKeyDown(event);
     },
     onKeyUp(event) {
-      // 检查是否是左Shift键释放
-      if (event.keyCode === 16 && event.location === 1) {
-        this.shiftKeyPressed = false;
-        this.stopVoiceCommand();
-        // 防止触发浏览器默认行为
-        event.preventDefault();
-      }
+      this.handleGlobalKeyUp(event);
     },
     // 添加贝塞尔曲线计算辅助函数
     evaluateBezierCurve(t, p0, p1, p2, p3) {
@@ -4184,7 +5138,7 @@ export default {
     // 新方法：检查并生成新飞机以维持游戏难度
     checkAndSpawnNewAircraft() {
       // 如果游戏不在运行状态，不生成新飞机
-      if (this.gameStatus !== 'running') return;
+      if (this.gameStatus !== 'running' || this.testMode) return;
       
       console.log(`检查飞机数量: 当前 ${this.airplanes.length}/${this.dynamicMaxAircraftCount}`);
       
@@ -4211,20 +5165,12 @@ export default {
       
       if (needsReset) {
         console.log(`${plane.id} 正在${plane.state === "FINAL_APPROACH" ? "进场" : "着陆"}，但收到新命令，将其状态重置为FLYING`);
-        
-        // 重置为飞行状态
-        plane.state = "FLYING";
-        plane.speed = 0.2 * this.speedLevel; // 使用正常速度
-        
-        // 清除进场相关数据
-        plane.approachPath = null;
-        plane.approachPathCreated = false;
-        plane.landingRunway = null;
-        
-        // 清除跑道相关数据
-        plane.targetRunwayX = undefined;
-        plane.targetRunwayY = undefined;
-        plane.runway = null;
+        this.initiateMissedApproach(plane, { preserveHeading: true, log: true });
+        plane.targetBeaconId = null;
+        plane.targetBeaconX = undefined;
+        plane.targetBeaconY = undefined;
+        plane.departureProcedure = null;
+        plane.departureProcedureWaypointIndex = 0;
         
         return true;
       }
@@ -4413,9 +5359,12 @@ export default {
             Math.pow(plane1.y - plane2.y, 2)
           );
           
-          // 无论飞机状态如何，只要距离小于安全距离，就视为碰撞
-          if (distance < this.safetyDistance) {
-            console.log(`检测到碰撞: ${plane1.id}(${plane1.state}) 与 ${plane2.id}(${plane2.state}) 距离=${distance}`);
+          const verticalDistance = Math.abs((plane1.altitude || 0) - (plane2.altitude || 0));
+
+          // 雷达图标已经重叠时直接判定碰撞；否则使用水平/垂直间隔规则。
+          const isHardCollision = distance < this.hardCollisionDistance;
+          if (isAircraftConflict(distance, verticalDistance, this)) {
+            console.log(`检测到冲突: ${plane1.id}(${plane1.state}) 与 ${plane2.id}(${plane2.state}) 距离=${distance}, 高度差=${verticalDistance}`);
             
             // 标记问题飞机并触发游戏结束
             this.problemAircraft = [plane1, plane2]; // 存储整个飞机对象而不是ID
@@ -4424,7 +5373,8 @@ export default {
             const locationDesc = this.getLocationDescription(plane1, plane2);
             
             // 创建全英文的碰撞消息
-            this.triggerGameOver("COLLISION", `${plane1.id}(${plane1.state}) collided with ${plane2.id}(${plane2.state}) ${locationDesc}`);
+            const conflictType = isHardCollision ? "radar targets overlapped" : "lost separation";
+            this.triggerGameOver("COLLISION", `${plane1.id}(${plane1.state}) ${conflictType} with ${plane2.id}(${plane2.state}) ${locationDesc}, vertical ${Math.round(verticalDistance)}ft`);
             return true;
           }
         }
@@ -4477,6 +5427,32 @@ export default {
           return;
         }
       }
+    },
+
+    checkRestrictedAreaViolations() {
+      if (this.isGameOver) return;
+
+      const controlledStates = ["FLYING", "APPROACH", "FINAL_APPROACH", "TAKEOFF"];
+      const activeAreas = this.restrictedAreas.filter(area => area.active && area.points?.length >= 3);
+      if (activeAreas.length === 0) return;
+
+      for (const plane of this.airplanes) {
+        if (!controlledStates.includes(plane.state)) continue;
+
+        const violatedArea = activeAreas.find(area => this.isPointInPolygon(plane.x, plane.y, area.points));
+        if (violatedArea) {
+          this.problemAircraft = [plane];
+          this.triggerGameOver(
+            "RESTRICTED_AREA",
+            `AIRSPACE VIOLATION: ${plane.id} entered ${violatedArea.id} ${violatedArea.label}`
+          );
+          return;
+        }
+      }
+    },
+
+    isPointInPolygon(x, y, points) {
+      return isPointInPolygon(x, y, points);
     },
     
     // 检查地面等待超时
@@ -4561,6 +5537,9 @@ export default {
         case "GROUND_DELAY":
           // 地面延误警告音
           this.speak("Ground delay timeout!");
+          break;
+        case "RESTRICTED_AREA":
+          this.speak("Airspace violation!");
           break;
       }
     },
@@ -4715,39 +5694,22 @@ export default {
         return (a.queuePosition || 0) - (b.queuePosition || 0);
       });
       
-      // 基础位置
-      const baseX = 900;
-      const baseY = 600;
-      const spacing = 50;
+      const queue = this.airport.departureQueue || { x: this.airport.center.x, y: this.airport.center.y, spacingX: 0, spacingY: 50 };
       
       // 更新每架飞机的位置和队列号
       waitingPlanes.forEach((plane, index) => {
         plane.queuePosition = index;
-        plane.x = baseX;
-        plane.y = baseY + (index * spacing);
+        plane.x = queue.x + index * (queue.spacingX || 0);
+        plane.y = queue.y + index * (queue.spacingY || 50);
       });
     },
-    decreaseSpeed() {
-      // 减速0.25倍(最低为0.5倍)
-      this.speedLevel = Math.max(0.5, this.speedLevel - 0.25);
-    },
-    resetSpeed() {
-      // 重置为标准速度
-      this.speedLevel = 1;
-    },
-    increaseSpeed() {
-      // 加速0.25倍(最高为2倍)
-      this.speedLevel = Math.min(2, this.speedLevel + 0.25);
+    setSpeedLevel(level) {
+      if ([0.5, 1, 1.5, 2].includes(level)) {
+        this.speedLevel = level;
+      }
     }
   },
   watch: {
-    speedLevel() {
-      for (const plane of this.airplanes) {
-        if (plane.state !== "READY_FOR_TAKEOFF") {
-          plane.speed = 0.2 * this.speedLevel;
-        }
-      }
-    },
     // 监听难度变化，如果在游戏运行中切换难度，重新设置生成间隔
     difficulty() {
       if (this.gameStatus === 'running') {
@@ -4788,4 +5750,3 @@ export default {
   }
 };
 </script>
-
