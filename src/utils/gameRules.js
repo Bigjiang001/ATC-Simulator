@@ -1,6 +1,16 @@
 export const LANDING_ROLL_TARGET_DISTANCE = 200;
 export const BASE_SIMULATION_FRAME_RATE = 60;
 export const ALTITUDE_TIME_SCALE = 4;
+export const GROUND_WAIT_TIMEOUTS = Object.freeze({
+  beginner: 180000,
+  intermediate: 150000,
+  advanced: 120000,
+  expert: 90000,
+});
+
+export function getGroundWaitTimeout(difficulty) {
+  return GROUND_WAIT_TIMEOUTS[difficulty] || GROUND_WAIT_TIMEOUTS.intermediate;
+}
 
 export function normalizeDeltaSeconds(dt) {
   if (!Number.isFinite(dt) || dt <= 0) return 1 / BASE_SIMULATION_FRAME_RATE;

@@ -901,6 +901,7 @@ import {
   buildSmoothApproachTrajectory,
   canRotateForTakeoff,
   getFinalApproachDistance,
+  getGroundWaitTimeout,
   getAircraftStatusTag,
   getCoarsePointerHitRadius,
   getApproachPoseAtDistance,
@@ -1069,7 +1070,7 @@ export default {
       takeoffMinimumRunwayProgress: 0.52,
       departureTurnAltitude: 400,
       missedApproachAltitude: 3000,
-      groundWaitTimeout: 60000, // 地面等待超时时间（60秒）
+      groundDelayWarningRatio: 0.6,
       radarBounds: { // 雷达边界，超出此范围视为飞出雷达范围
         minX: -50,
         maxX: 1850,
@@ -1086,6 +1087,9 @@ export default {
     // 获取当前难度下的最大飞机数量
     currentMaxAircraftCount() {
       return this.maxAircraftCount[this.difficulty];
+    },
+    currentGroundWaitTimeout() {
+      return getGroundWaitTimeout(this.difficulty);
     },
     // 计算当前进场和起飞飞机的数量
     currentApproachCount() {
@@ -1124,6 +1128,7 @@ export default {
         approachPhase: plane.approachPath?.phase || null,
         approachProgress: Math.round((plane.approachPath?.progressT || 0) * 1000) / 1000,
         approachPathType: plane.approachPath?.trajectory?.pathType || null,
+        targetAltitude: Math.round(plane.targetAltitude || 0),
       })));
     },
     incomingTestState() {
@@ -1321,6 +1326,8 @@ export default {
         this.setupLandingOccupancyTestScenario();
       } else if (this.testScenario === 'repeat-landing') {
         this.setupRepeatedLandingClearanceTestScenario();
+      } else if (this.testScenario === 'manual-handoff') {
+        this.setupManualHandoffTestScenario();
       } else {
         this.spawnApproach();
       }
@@ -2031,6 +2038,32 @@ export default {
       this.repeatApproachPreserved = plane.approachPath === originalApproachPath;
     },
 
+    setupManualHandoffTestScenario() {
+      const mxw = this.navBeacons.find(beacon => beacon.id === "MXW");
+      if (!mxw) return;
+      const plane = {
+        id: "B9001",
+        flightType: "DEPARTURE",
+        x: mxw.x + 65,
+        y: mxw.y,
+        heading: 270,
+        targetHeading: 270,
+        altitude: 3000,
+        targetAltitude: 3000,
+        verticalSpeed: 0,
+        indicatedSpeed: 220,
+        speed: 0.2,
+        state: "TAKEOFF",
+        runway: "04",
+        airborne: true,
+        selected: false,
+        visible: true,
+      };
+      this.airplanes = [plane];
+      this.processDepartureProcedureCommand(plane.id, "04-MXW");
+      this.testAircraftSpawned = true;
+    },
+
     setupRunwayOccupancyTestScenario() {
       const runway = this.runways[0];
       const occupyingPlane = {
@@ -2159,6 +2192,7 @@ export default {
               // 如果状态从READY_FOR_TAKEOFF变为其他状态，标记队列变化
               if (plane.groundWaitElapsedMs !== undefined) {
                 delete plane.groundWaitElapsedMs;
+                delete plane.groundDelayWarningIssued;
                 if (plane.queuePosition !== undefined) {
                   queueChanged = true;
                   // 移除队列位置属性
@@ -2254,9 +2288,7 @@ export default {
               if (holdRunwayHeading) {
                 plane.heading = this.getRunwayHeading(plane.runway);
               } else {
-                if (plane.departureProcedure) {
-                  this.updateDepartureProcedureHeading(plane);
-                } else if (plane.targetBeaconId) {
+                if (plane.targetBeaconId) {
                   this.updateDirectToBeaconHeading(plane);
                 }
 
@@ -2346,7 +2378,6 @@ export default {
 
               // 检查飞机是否接近任何导航台
               for (const beacon of this.navBeacons) {
-                if (plane.departureProcedure) break;
                 const distToBeacon = Math.sqrt(
                   Math.pow(plane.x - beacon.x, 2) +
                   Math.pow(plane.y - beacon.y, 2)
@@ -2398,15 +2429,6 @@ export default {
               }
             }
 
-            if (plane.departureProcedure) {
-              const complete = this.updateDepartureProcedureProgress(plane);
-              if (complete) {
-                this.score += 1;
-                this.speak(`${plane.id} completed ${plane.departureProcedure.id}, exiting radar coverage`, true);
-                toRemove.push(plane);
-                this.canSpawnNewAircraft = true;
-              }
-            }
           } catch (planeError) {
             // 单个飞机更新出错，记录但继续处理其他飞机
             console.error(`更新飞机 ${plane.id} 时出错:`, planeError);
@@ -2540,10 +2562,13 @@ export default {
         const strip = runway
           ? this.airport.physicalRunways.find(item => item.id === runway.strip)
           : null;
-        const runwayProgress = getRunwayTravelProgress(plane, runway, strip);
+        const runwayProgress = Math.max(
+          plane.takeoffRunwayProgress || 0,
+          getRunwayTravelProgress(plane, runway, strip),
+        );
         plane.takeoffRunwayProgress = runwayProgress;
 
-        if (!canRotateForTakeoff(
+        if (!plane.airborne && !canRotateForTakeoff(
           plane.indicatedSpeed,
           runwayProgress,
           this.takeoffRotationSpeed,
@@ -2565,7 +2590,7 @@ export default {
         plane.targetAltitude = 0;
         plane.verticalSpeed = 0;
         return;
-      } else if (plane.state === "TAKEOFF" && (!plane.targetAltitude || plane.targetAltitude < 3000)) {
+      } else if (plane.state === "TAKEOFF" && (plane.targetAltitude === undefined || plane.targetAltitude === null)) {
         plane.targetAltitude = 5000;
       }
 
@@ -2788,36 +2813,6 @@ export default {
         return;
       }
       plane.targetHeading = this.calculateBearing(plane.x, plane.y, beacon.x, beacon.y);
-    },
-
-    updateDepartureProcedureHeading(plane) {
-      const procedure = plane.departureProcedure;
-      if (!procedure?.points?.length) return;
-
-      const waypointIndex = Math.min(plane.departureProcedureWaypointIndex || 0, procedure.points.length - 1);
-      const waypoint = procedure.points[waypointIndex];
-      plane.targetHeading = this.calculateBearing(plane.x, plane.y, waypoint.x, waypoint.y);
-    },
-
-    updateDepartureProcedureProgress(plane) {
-      const procedure = plane.departureProcedure;
-      if (!procedure?.points?.length) return false;
-
-      const waypointIndex = Math.min(plane.departureProcedureWaypointIndex || 0, procedure.points.length - 1);
-      const waypoint = procedure.points[waypointIndex];
-      const distance = Math.sqrt(Math.pow(plane.x - waypoint.x, 2) + Math.pow(plane.y - waypoint.y, 2));
-
-      if (distance > 45) return false;
-
-      if (waypointIndex >= procedure.points.length - 1) {
-        return true;
-      }
-
-      plane.departureProcedureWaypointIndex = waypointIndex + 1;
-      const nextWaypoint = procedure.points[plane.departureProcedureWaypointIndex];
-      plane.targetHeading = this.calculateBearing(plane.x, plane.y, nextWaypoint.x, nextWaypoint.y);
-      this.addToCommunicationLog(`${plane.id} established ${procedure.id} waypoint ${plane.departureProcedureWaypointIndex + 1}`);
-      return false;
     },
 
     radarSweep(dt = 1 / 60) {
@@ -4712,6 +4707,8 @@ export default {
       plane.airborne = false;
       plane.takeoffRunwayProgress = 0;
       plane.targetAltitude = Math.max(plane.targetAltitude || 0, 5000);
+      plane.departureProcedure = null;
+      plane.departureProcedureWaypointIndex = 0;
       return true;
     },
 
@@ -5460,7 +5457,9 @@ export default {
         plane.departureProcedure = null;
         plane.departureProcedureWaypointIndex = 0;
         if (plane.state === "TAKEOFF") {
-          plane.targetAltitude = Math.max(plane.targetAltitude || 0, 5000);
+          if (plane.targetAltitude === undefined || plane.targetAltitude === null) {
+            plane.targetAltitude = 5000;
+          }
         } else {
           plane.state = plane.state === 'HOLDING' ? 'HOLDING' : 'FLYING';
         }
@@ -5556,45 +5555,11 @@ export default {
           return;
         }
 
-        if (plane.runway && !plane.runway.startsWith(procedure.runwayPrefix)) {
-          this.addToCommunicationLog(`${procedure.id} is not valid from runway ${plane.runway}`);
-          return;
-        }
-
-        if (plane.state === "FINAL_APPROACH" || plane.state === "LANDING") {
-          this.resetApproachOrLandingState(plane);
-        }
-
-        const procedurePoints = procedure.points.map(point => ({ ...point }));
-        const departureRunway = plane.runway
-          ? this.runways.find(runway => runway.id === plane.runway)
-          : null;
-        if (departureRunway && procedurePoints.length) {
-          procedurePoints[0] = {
-            x: departureRunway.startX,
-            y: departureRunway.startY,
-          };
-        }
-
-        plane.departureProcedure = {
-          ...procedure,
-          points: procedurePoints,
-        };
+        plane.departureProcedure = null;
         plane.departureProcedureWaypointIndex = 0;
-        plane.targetBeaconId = null;
-        plane.targetBeaconX = undefined;
-        plane.targetBeaconY = undefined;
-        plane.forcedTurnDirection = null;
-        plane.preferredTurnDirection = null;
-
-        if (plane.state !== "READY_FOR_TAKEOFF" && plane.state !== "TAKEOFF") {
-          plane.state = "FLYING";
-          plane.targetMotionSpeed = 0.2;
-          plane.targetIndicatedSpeed = 250;
-        }
-
-        this.updateDepartureProcedureHeading(plane);
-        this.speak(`${planeId}, cleared via ${procedure.id}`);
+        this.addToCommunicationLog(
+          `${planeId}, automatic SID guidance unavailable; assign heading or proceed direct to any handoff point`,
+        );
       } catch (error) {
         console.error('Error processing departure procedure command:', error);
         this.addToCommunicationLog(`Error processing ${procedureId} for ${planeId}`);
@@ -5867,13 +5832,8 @@ export default {
         plane.targetBeaconId = null;
         plane.targetBeaconX = undefined;
         plane.targetBeaconY = undefined;
-        if (plane.departureProcedure && !runway.id.startsWith(plane.departureProcedure.runwayPrefix)) {
-          plane.departureProcedure = null;
-          plane.departureProcedureWaypointIndex = 0;
-        } else if (plane.departureProcedure?.points?.length) {
-          plane.departureProcedure.points[0] = { x: runway.startX, y: runway.startY };
-          plane.departureProcedureWaypointIndex = 0;
-        }
+        plane.departureProcedure = null;
+        plane.departureProcedureWaypointIndex = 0;
 
         this.initializeTakeoffRoll(plane, runway.id);
         delete plane.queuePosition;
@@ -6271,6 +6231,7 @@ export default {
     checkAndSpawnNewAircraft() {
       // 如果游戏不在运行状态，不生成新飞机
       if (this.gameStatus !== 'running' || this.testMode) return;
+      if (this.isTrafficFlowRestrictedForGroundDelay()) return;
 
       console.log(`检查飞机数量: 当前 ${this.airplanes.length}/${this.dynamicMaxAircraftCount}`);
 
@@ -6328,6 +6289,10 @@ export default {
 
     spawnNextTraffic() {
       if (this.gameStatus !== 'running' || this.testMode) return;
+
+      // Once a departure reaches the warning threshold, meter new traffic until
+      // the player creates a runway slot. Existing traffic remains active.
+      if (this.isTrafficFlowRestrictedForGroundDelay()) return;
 
       this.checkGamePhase();
       if (Math.random() < 0.7) this.spawnApproach();
@@ -6562,24 +6527,45 @@ export default {
       // 如果游戏已结束，不再检测
       if (this.isGameOver) return;
 
-      // 获取所有正在地面等待的飞机
-      const groundPlanes = this.airplanes.filter(plane =>
-        plane.state === "READY_FOR_TAKEOFF"
-      );
+      // Only the head of the queue is currently actionable. Aircraft behind it
+      // begin accumulating delay after they move to the front.
+      const plane = this.getNextDepartureInQueue();
+      if (!plane) return;
 
-      for (const plane of groundPlanes) {
-        plane.groundWaitElapsedMs = (plane.groundWaitElapsedMs || 0) +
-          Math.max(0, Number(dt) || 0) * 1000;
+      plane.groundWaitElapsedMs = (plane.groundWaitElapsedMs || 0) +
+        Math.max(0, Number(dt) || 0) * 1000;
 
-        if (plane.groundWaitElapsedMs > this.groundWaitTimeout) {
-          this.problemAircraft = [plane];
-          this.triggerGameOver(
-            "GROUND_DELAY",
-            `GROUND DELAY: ${plane.id} exceeded maximum waiting time`
-          );
-          return;
-        }
+      const warningThreshold = this.currentGroundWaitTimeout * this.groundDelayWarningRatio;
+      if (plane.groundWaitElapsedMs >= warningThreshold && !plane.groundDelayWarningIssued) {
+        plane.groundDelayWarningIssued = true;
+        this.addToCommunicationLog(
+          `GROUND DELAY WARNING: ${plane.id}, prioritize the next departure slot`
+        );
       }
+
+      if (plane.groundWaitElapsedMs > this.currentGroundWaitTimeout) {
+        this.problemAircraft = [plane];
+        this.triggerGameOver(
+          "GROUND_DELAY",
+          `GROUND DELAY: ${plane.id} exceeded maximum waiting time`
+        );
+      }
+    },
+
+    getNextDepartureInQueue() {
+      return this.airplanes
+        .filter(plane => plane.state === "READY_FOR_TAKEOFF")
+        .sort((first, second) =>
+          (first.queuePosition ?? Number.MAX_SAFE_INTEGER) -
+          (second.queuePosition ?? Number.MAX_SAFE_INTEGER)
+        )[0] || null;
+    },
+
+    isTrafficFlowRestrictedForGroundDelay() {
+      const plane = this.getNextDepartureInQueue();
+      return Boolean(plane &&
+        (plane.groundWaitElapsedMs || 0) >=
+          this.currentGroundWaitTimeout * this.groundDelayWarningRatio);
     },
 
     // 触发游戏结束

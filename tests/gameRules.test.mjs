@@ -5,6 +5,7 @@ import {
   buildSmoothApproachTrajectory,
   canRotateForTakeoff,
   getFinalApproachDistance,
+  getGroundWaitTimeout,
   getAircraftStatusTag,
   getCoarsePointerHitRadius,
   getApproachPoseAtDistance,
@@ -23,6 +24,12 @@ import {
   updateLandingRollProgress,
   vectorToHeading,
 } from "../src/utils/gameRules.js";
+
+assert.equal(getGroundWaitTimeout("beginner"), 180000, "beginner ground delay should allow three minutes");
+assert.equal(getGroundWaitTimeout("intermediate"), 150000, "intermediate ground delay should allow two and a half minutes");
+assert.equal(getGroundWaitTimeout("advanced"), 120000, "advanced ground delay should allow two minutes");
+assert.equal(getGroundWaitTimeout("expert"), 90000, "expert ground delay should allow ninety seconds");
+assert.equal(getGroundWaitTimeout("unknown"), 150000, "unknown difficulty should use the intermediate limit");
 
 function orientation(a, b, c) {
   return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
@@ -489,6 +496,31 @@ assert.match(
 );
 assert.match(
   appSource,
+  /const plane = this\.getNextDepartureInQueue\(\);[\s\S]*plane\.groundWaitElapsedMs/,
+  "only the actionable head-of-line departure should accumulate ground delay",
+);
+assert.match(
+  appSource,
+  /GROUND DELAY WARNING:[\s\S]*prioritize the next departure slot/,
+  "long ground waits should warn the player before ending the game",
+);
+assert.match(
+  appSource,
+  /spawnNextTraffic\(\)[\s\S]*if \(this\.isTrafficFlowRestrictedForGroundDelay\(\)\) return;/,
+  "scheduled traffic should be metered after a departure delay warning",
+);
+assert.match(
+  appSource,
+  /checkAndSpawnNewAircraft\(\)[\s\S]*if \(this\.isTrafficFlowRestrictedForGroundDelay\(\)\) return;/,
+  "replacement traffic should be metered after a departure delay warning",
+);
+assert.match(
+  appSource,
+  /isTrafficFlowRestrictedForGroundDelay\(\)[\s\S]*currentGroundWaitTimeout \* this\.groundDelayWarningRatio/,
+  "traffic metering should use the same difficulty-based warning threshold",
+);
+assert.match(
+  appSource,
   /this\.airplanes\.length \+ this\.incomingAircraft\.length >= this\.dynamicMaxAircraftCount/,
   "pending arrivals must count toward the traffic limit",
 );
@@ -498,6 +530,14 @@ assert.match(appSource, /flightType:\s*["']DEPARTURE["']/, "departure traffic sh
 assert.match(appSource, /plane\.flightType\s*!==\s*["']DEPARTURE["']/, "arrival traffic must not accept departure procedures");
 assert.match(appSource, /handoff points are available to departure traffic only/, "arrival traffic must not be handed off at departure fixes");
 assert.match(appSource, /plane\.flightType\s*===\s*["']DEPARTURE["']\s*&&\s*plane\.targetBeaconId/, "handoff scoring should be restricted to departures");
+assert.match(
+  appSource,
+  /automatic SID guidance unavailable; assign heading or proceed direct to any handoff point/,
+  "SID charts must not automatically control departing aircraft",
+);
+assert.equal(/updateDepartureProcedureHeading\(/.test(appSource), false, "departures must not receive automatic SID heading updates");
+assert.equal(/updateDepartureProcedureProgress\(/.test(appSource), false, "departures must not advance automatic SID waypoints");
+assert.equal(/if \(plane\.departureProcedure\) break;/.test(appSource), false, "manual departures must score at any handoff point");
 assert.match(
   appSource,
   /setupTakeoffTestScenario\(\)[\s\S]*this\.processTakeoffCommand\(plane\.id, `takeoff runway \$\{runway\.id\}`\)/,
@@ -565,6 +605,29 @@ assert.match(
   appSource,
   /plane\.heading = runway\.heading;\s*plane\.targetHeading = runway\.heading;/,
   "departures must retain runway heading after the initial climb",
+);
+assert.match(
+  appSource,
+  /Math\.max\(\s*plane\.takeoffRunwayProgress \|\| 0,\s*getRunwayTravelProgress/,
+  "takeoff runway progress must remain monotonic after rotation",
+);
+assert.match(
+  appSource,
+  /if \(!plane\.airborne && !canRotateForTakeoff\(/,
+  "an airborne departure must never be reset to the ground after turning away from the runway",
+);
+assert.equal(
+  /plane\.state === "TAKEOFF" && \(!plane\.targetAltitude \|\| plane\.targetAltitude < 3000\)/.test(appSource),
+  false,
+  "departure updates must not overwrite an assigned altitude below 3000 feet",
+);
+const headingCommandStart = appSource.indexOf("processHeadingCommand(planeId, command)");
+const headingCommandEnd = appSource.indexOf("processDirectToBeaconCommand(planeId, beaconId)", headingCommandStart);
+const headingCommandSource = appSource.slice(headingCommandStart, headingCommandEnd);
+assert.equal(
+  /targetAltitude\s*=\s*Math\.max\([^\n]*5000/.test(headingCommandSource),
+  false,
+  "heading instructions must not replace the player's assigned departure altitude",
 );
 assert.match(
   appSource,
