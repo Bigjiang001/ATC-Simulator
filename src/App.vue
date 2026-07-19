@@ -74,6 +74,7 @@
       :data-last-touchdown-altitude="lastTouchdownAltitude ?? ''"
       :data-game-over="isGameOver"
       :data-game-over-reason="gameOverReason"
+      :data-repeat-approach-preserved="repeatApproachPreserved ?? ''"
       :data-aircraft-state="aircraftTestState"
       :data-incoming-state="incomingTestState"
       :data-speech-voice="preferredSpeechVoiceName"
@@ -947,6 +948,7 @@ export default {
       gameStatus: 'start',
       testScenario: import.meta.env.DEV ? (new URLSearchParams(window.location.search).get('test') || '') : '',
       testMode: import.meta.env.DEV && new URLSearchParams(window.location.search).has('test'),
+      repeatApproachPreserved: null,
       testAircraftSpawned: false,
       gameLoopId: null,
       lastRenderTime: 0,
@@ -1226,6 +1228,7 @@ export default {
       this.sweepAngle = 0;
       this.testAircraftSpawned = false;
       this.lastTouchdownAltitude = null;
+      this.repeatApproachPreserved = null;
     },
 
     changeAirport() {
@@ -1300,6 +1303,8 @@ export default {
       this.lastTouchdownAltitude = null;
       if (this.testScenario === 'collision') {
         this.setupCollisionTestScenario();
+      } else if (this.testScenario === 'runway-collision') {
+        this.setupRunwayCollisionTestScenario();
       } else if (this.testScenario === 'voice') {
         this.setupVoiceTestScenario();
       } else if (this.testScenario === 'speed') {
@@ -1314,6 +1319,8 @@ export default {
         this.setupRunwayOccupancyTestScenario();
       } else if (this.testScenario === 'landing-occupied') {
         this.setupLandingOccupancyTestScenario();
+      } else if (this.testScenario === 'repeat-landing') {
+        this.setupRepeatedLandingClearanceTestScenario();
       } else {
         this.spawnApproach();
       }
@@ -1862,6 +1869,30 @@ export default {
       this.testAircraftSpawned = true;
     },
 
+    setupRunwayCollisionTestScenario() {
+      const runway = this.runways[0];
+      const common = {
+        x: runway.startX,
+        y: runway.startY,
+        heading: runway.heading,
+        targetHeading: runway.heading,
+        altitude: 0,
+        targetAltitude: 0,
+        verticalSpeed: 0,
+        indicatedSpeed: 120,
+        speed: 0,
+        runway: runway.id,
+        landingRunway: runway.id,
+        selected: false,
+        visible: true,
+      };
+      this.airplanes = [
+        { ...common, id: "B9001", flightType: "DEPARTURE", state: "TAKEOFF" },
+        { ...common, id: "B9002", flightType: "ARRIVAL", state: "LANDING" },
+      ];
+      this.testAircraftSpawned = true;
+    },
+
     setupVoiceTestScenario() {
       this.airplanes = [{
         id: "B9001",
@@ -1990,6 +2021,14 @@ export default {
       this.airplanes = [plane];
       this.assignApproachPath(plane, runway, entrance);
       this.testAircraftSpawned = true;
+    },
+
+    setupRepeatedLandingClearanceTestScenario() {
+      this.setupApproachTurnTestScenario();
+      const plane = this.airplanes[0];
+      const originalApproachPath = plane.approachPath;
+      this.processLandingCommand(plane.id, `land runway ${plane.landingRunway}`);
+      this.repeatApproachPreserved = plane.approachPath === originalApproachPath;
     },
 
     setupRunwayOccupancyTestScenario() {
@@ -2675,6 +2714,7 @@ export default {
       plane.indicatedSpeed = plane.touchdownAirspeed;
       plane.assignedSpeed = null;
       plane.landingDirection = this.getRunwayHeading(landingRunway);
+      plane.missedApproachActive = false;
       this.initializeLandingRoll(plane);
       return true;
     },
@@ -3690,7 +3730,14 @@ export default {
         if (plane.state === "READY_FOR_TAKEOFF") {
           const runwayCheck = this.checkNearRunwayEntrance(x, y);
           const runwayInfo = runwayCheck.isNear ? runwayCheck.info : null;
-          const success = Boolean(runwayInfo);
+          const occupyingPlane = runwayInfo
+            ? this.getRunwayOccupyingAircraft(runwayInfo.id, plane)
+            : null;
+          const success = Boolean(runwayInfo && !occupyingPlane);
+
+          if (occupyingPlane) {
+            this.speak(`${plane.id}, hold position, runway occupied by ${occupyingPlane.id}`);
+          }
 
           if (success) {
             plane.x = runwayInfo.x;
@@ -3709,7 +3756,9 @@ export default {
           if (!success) {
             plane.x = originalX;
             plane.y = originalY;
-            this.addToCommunicationLog(`${plane.id}, unable to take position, return to gate`);
+            if (!occupyingPlane) {
+              this.addToCommunicationLog(`${plane.id}, unable to take position, return to gate`);
+            }
             console.log(`${plane.id} 未成功放置到跑道端口，返回原位`);
         } else {
             // 如果成功起飞，从队列中移除
@@ -3755,12 +3804,24 @@ export default {
       }
 
       // 检查是否拖到了跑道入口
-      if (this.dragLine.isNearRunwayEntrance && (plane.state === "APPROACH" || plane.state === "FLYING")) {
+      if (this.dragLine.isNearRunwayEntrance && ["APPROACH", "FLYING", "FINAL_APPROACH"].includes(plane.state)) {
         // 创建一个进场指令
         const runwayInfo = this.dragLine.runwayInfo;
 
         if (!runwayInfo) {
           console.error("Runway information missing in dragLine");
+          return;
+        }
+
+        // Repeating the same clearance must keep the established approach.
+        // Previously, a second touch drag on final was treated as a heading
+        // command, which cancelled the landing and triggered another go-around.
+        if (this.continueExistingApproach(plane, runwayInfo.id)) {
+          plane.selected = false;
+          this.selectedPlane = null;
+          this.dragging = false;
+          this.dragFollowing = null;
+          this.dragLine = null;
           return;
         }
 
@@ -3800,6 +3861,10 @@ export default {
         plane.state = "FINAL_APPROACH";
         plane.landingRunway = runwayInfo.id;
         plane.landingDirection = finalHeading;
+        plane.runway = null;
+        plane.missedApproachActive = false;
+        plane.newCommandIssued = false;
+        plane.approachPathCreated = true;
 
         // 保存当前速度值
         const currentSpeed = plane.speed;
@@ -5611,6 +5676,20 @@ export default {
       }
     },
 
+    continueExistingApproach(plane, runwayId) {
+      const isSameActiveApproach = Boolean(
+        plane?.approachPath &&
+        plane.landingRunway === runwayId &&
+        ["APPROACH", "FINAL_APPROACH"].includes(plane.state)
+      );
+      if (!isSameActiveApproach) return false;
+
+      plane.missedApproachActive = false;
+      plane.newCommandIssued = false;
+      this.speak(`${plane.id}, continue approach runway ${runwayId}`);
+      return true;
+    },
+
     // 处理着陆指令 - 极简版本，确保不会卡住
     processLandingCommand(planeId, command) {
       console.log(`处理着陆指令: "${command}" 对 ${planeId}`);
@@ -5660,6 +5739,10 @@ export default {
           this.addToCommunicationLog(isEnglish
             ? `Runway ${runwayId} not found`
             : `跑道${runwayId}未找到`);
+          return;
+        }
+
+        if (this.continueExistingApproach(plane, runwayId)) {
           return;
         }
 
@@ -5823,6 +5906,8 @@ export default {
       plane.landingRunway = runway.id;
       plane.landingDirection = runway.heading;
       plane.state = "FINAL_APPROACH";
+      plane.runway = null;
+      plane.missedApproachActive = false;
       plane.approachPath = {
         startX: plane.x,
         startY: plane.y,

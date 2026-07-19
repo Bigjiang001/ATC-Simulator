@@ -523,8 +523,33 @@ assert.match(
 );
 assert.match(
   appSource,
+  /this\.getRunwayOccupyingAircraft\(runwayInfo\.id, plane\)/,
+  "touch takeoff clearance must also check runway occupancy",
+);
+assert.match(
+  appSource,
   /go around, runway occupied by/,
   "an arrival must go around when the runway remains occupied at the threshold",
+);
+assert.match(
+  appSource,
+  /\["APPROACH", "FLYING", "FINAL_APPROACH"\]\.includes\(plane\.state\)/,
+  "repeating a touch landing clearance on final must stay in the landing flow",
+);
+assert.match(
+  appSource,
+  /continueExistingApproach\(plane, runwayId\)[\s\S]*continue approach runway/,
+  "repeated landing clearances must preserve an established approach",
+);
+assert.match(
+  appSource,
+  /plane\.landingDirection = this\.getRunwayHeading\(landingRunway\);\s*plane\.missedApproachActive = false;/,
+  "touchdown must clear any stale missed-approach indication",
+);
+assert.match(
+  appSource,
+  /setupRunwayCollisionTestScenario\(\)[\s\S]*state: "TAKEOFF"[\s\S]*state: "LANDING"/,
+  "runway takeoff and landing collisions must remain covered by regression testing",
 );
 assert.match(
   appSource,
