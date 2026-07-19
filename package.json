@@ -1,12 +1,16 @@
 {
   "name": "atc-sim",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.1.1",
   "type": "module",
   "homepage": "https://bigjiang001.github.io/ATC-Simulator/",
   "scripts": {
+    "test": "npm run test:rules && npm run test:voice && npm run test:speech",
     "dev": "vite",
     "build": "vite build",
+    "test:voice": "node tests/voiceCommandParser.test.mjs",
+    "test:speech": "node tests/speechVoice.test.mjs && node tests/localSpeech.test.mjs && node tests/radioEffects.test.mjs",
+    "test:rules": "node tests/gameRules.test.mjs",
     "build:fix": "vite build && node fix-html.js",
     "preview": "vite preview",
     "package": "vite build && node inline-assets.js",

@@ -10,4 +10,8 @@ document.addEventListener('click', () => {
   radioEffects.init();
 }, { once: true });
 
-createApp(App).mount('#app')
+const appInstance = createApp(App).mount('#app')
+
+if (import.meta.env.DEV) {
+  window.__ATC_DEBUG_APP__ = appInstance
+}
