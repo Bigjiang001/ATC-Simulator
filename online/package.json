@@ -1,0 +1,31 @@
+{
+  "name": "atc2-browser-edition",
+  "version": "2.0.0",
+  "private": true,
+  "description": "ATC2.0 browser edition, Web Speech API, static hosting",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-standalone.cjs",
+    "test": "node scripts/run-unit-tests.cjs && node scripts/test-gameplay.cjs && node scripts/test-ui-language.cjs && node scripts/test-browser-speech.cjs",
+    "test:ui": "node scripts/test-browser-ui.cjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "@playwright/test": "^1.44.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11",
+    "vitest": "^1.6.0"
+  }
+}

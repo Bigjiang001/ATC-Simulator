@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#02090c">
+  <meta name="description" content="空中交通管制模拟器 V2.0：四座机场、电子进程单、标准进离场程序和语音指挥。在线体验或下载本地部署版。">
+  <title>空中交通管制模拟器 · ATC2.0</title>
+  <link rel="stylesheet" href="site.css">
+  <script src="site.js" defer></script>
+</head>
+<body>
+  <a href="#intro" class="skip-link">跳至游戏介绍</a>
+  <header>
+    <div class="logo">Air traffic control simulator &nbsp;&nbsp;&nbsp; Electronic checklist</div>
+    <button class="nav-toggle" aria-label="打开导航菜单" aria-expanded="false" aria-controls="site-nav"><span></span><span></span></button>
+    <nav id="site-nav" aria-label="主导航">
+      <a href="#home">主页</a>
+      <a href="#intro">空管模拟器介绍</a>
+      <a href="#checklist">电子检查单介绍</a>
+      <a href="https://github.com/Bigjiang001/ATC-Simulator" target="_blank" rel="noopener noreferrer" class="github-download">开源下载 ↗</a>
+      <a href="#about">关于我们</a>
+      <a href="#contact">联系我们</a>
+    </nav>
+  </header>
+  <main>
+    <section class="hero" id="home" aria-labelledby="welcome-title">
+      <canvas id="radar" aria-hidden="true"></canvas>
+      <div class="radar-vignette" aria-hidden="true"></div>
+      <div class="scope-caption mono" aria-hidden="true"><span class="live-dot"></span>ZSHB / APPROACH CONTROL<span class="caption-secondary">RADAR DISPLAY · 演示雷达</span></div>
+      <div class="hero-content">
+        <h1 id="welcome-title">欢迎使用空中交通管制模拟器</h1>
+        <p>沉浸式体验真实的空管指挥环境</p>
+        <a class="hero-cta" href="game/">进入游戏 <span aria-hidden="true">↗</span></a>
+      </div>
+      <div class="scope-footer mono" aria-hidden="true"><span>ACTIVE RWY <b>09L / 09R</b></span><span>RADAR <b>ONLINE</b></span><span class="scope-third">VHF <b>119.75</b></span></div>
+      <a href="#intro" class="scroll-cue" aria-label="向下查看 ATC2.0 介绍"><span></span><small>向下探索 ATC 2.0</small></a>
+      <button id="motion-toggle" class="motion-toggle mono" aria-pressed="false" aria-label="暂停页面动效">Ⅱ 暂停动效</button>
+    </section>
+
+    <section class="v2-section section-shell" id="intro" aria-labelledby="v2-title">
+      <div class="section-heading reveal">
+        <div class="section-eyebrow mono"><span></span> THE NEXT FREQUENCY / 全新升级</div>
+        <div class="title-row"><h2 id="v2-title">空中交通管制模拟器 <em>2.0</em></h2><span class="version-pill mono">V2.0</span></div>
+        <p class="section-lead">从一架飞机的起降，到一片空域的有序运行。<br>现在，换你坐在雷达屏幕前。</p>
+      </div>
+      <div class="sim-preview reveal">
+        <div class="preview-toolbar"><span class="mono preview-label"><i></i>ATC 2.0 · 实际游戏画面</span><span class="mono preview-counter" id="screen-counter">01 / 04</span></div>
+        <div class="airport-tabs" role="tablist" aria-label="选择机场截图">
+          <button id="tab-ZSHB" class="airport-tab active" role="tab" aria-selected="true" aria-controls="screen-panel" tabindex="0" data-airport="ZSHB"><span class="mono">ZSHB</span><span>海湾</span></button>
+          <button id="tab-ZSPD" class="airport-tab" role="tab" aria-selected="false" aria-controls="screen-panel" tabindex="-1" data-airport="ZSPD"><span class="mono">ZSPD</span><span>上海浦东</span></button>
+          <button id="tab-RJTT" class="airport-tab" role="tab" aria-selected="false" aria-controls="screen-panel" tabindex="-1" data-airport="RJTT"><span class="mono">RJTT</span><span>东京羽田</span></button>
+          <button id="tab-EGLL" class="airport-tab" role="tab" aria-selected="false" aria-controls="screen-panel" tabindex="-1" data-airport="EGLL"><span class="mono">EGLL</span><span>伦敦希思罗</span></button>
+        </div>
+        <div id="screen-panel" class="screen-panel" role="tabpanel" aria-labelledby="tab-ZSHB" tabindex="0">
+          <button class="screenshot-button" data-zoom="assets/v2/ZSHB.jpg" data-caption="海湾机场 · 雷达与电子进程单" aria-label="放大查看游戏截图" id="main-screenshot-button">
+            <img id="main-screenshot" src="assets/v2/ZSHB.jpg" width="1600" height="1000" alt="ATC2.0 海湾机场实际游戏截图：中央雷达、右侧电子进程单与指令台、底部双语陆空通话记录" loading="lazy">
+            <span class="zoom-hint mono" aria-hidden="true">↗ 放大查看</span>
+          </button>
+        </div>
+        <div class="preview-caption"><div><span class="mono" id="screen-number">01 — ZSHB</span><h3 id="screen-title">雷达与电子进程单，一眼掌握态势。</h3></div><p id="screen-description">在海湾机场熟悉雷达标牌、航向、高度与速度，从新手教学开始你的第一班执勤。</p></div>
+      </div>
+      <div class="feature-grid reveal">
+        <article><span class="feature-index mono">01 / FLIGHT STRIPS</span><h3>每架飞机，都有一张进程单。</h3><p>电子进程单实时显示航班、进离港状态、高度、速度和跑道。点击航班，随时接手指挥。</p></article>
+        <article><span class="feature-index mono">02 / STAR · SID</span><h3>进离场，不止一条直线。</h3><p>标准进离场程序、航路点直飞与空中等待，配合航向、高度和速度，把航班排进合适的顺序。</p></article>
+        <article><span class="feature-index mono">03 / RUNWAY CONTROL</span><h3>一次许可，一次安全起降。</h3><p>引导 ILS 进近、放行起飞、复飞与移交。在跑道占用、尾流间隔和不同机场布局中作出判断。</p></article>
+      </div>
+      <div class="play-strip reveal"><div><span class="mono">YOUR FIRST SHIFT</span><p><b>选择机场与难度</b><i aria-hidden="true">→</i><b>选中航班</b><i aria-hidden="true">→</i><b>按钮、文字或 Shift 语音指挥</b></p></div><a href="game/" class="text-link">开始我的执勤 <span aria-hidden="true">↗</span></a></div>
+    </section>
+
+    <section class="editions-section section-shell" aria-labelledby="editions-title">
+      <div class="editions-heading reveal"><span class="section-eyebrow mono">ONE GAME / TWO WAYS TO PLAY</span><h2 id="editions-title">在线即玩，也能本地部署。</h2></div>
+      <div class="editions-grid reveal">
+        <article class="edition online-edition"><div class="edition-top"><span class="mono">01 / ONLINE</span><span class="edition-badge">无需安装</span></div><h3>打开网页，就能开始。</h3><p>在线版使用浏览器自带的语音播报与语音识别。推荐 Chrome，管制员优先女声、飞行员优先男声，也可自行选择音色。</p><small>可用音色和识别能力因浏览器及系统而异，识别可能需要联网；也能用文字和按钮指挥。</small><a href="game/" class="edition-link">进入在线版 <span aria-hidden="true">↗</span></a></article>
+        <article class="edition local-edition"><div class="edition-top"><span class="mono">02 / LOCAL</span><span class="edition-badge">开源 · 自由部署</span></div><h3>把整套声音，留在本机。</h3><p>项目已开源，可从 GitHub 获取代码并按说明本地部署。本地版使用三个模型处理中文播报、英文播报和语音识别，也可自行修改、替换本地语音模型。</p><small>网页版直接通过浏览器游玩，无需区分系统版本；本地部署的环境和模型准备方式请查看仓库说明。</small><a href="https://github.com/Bigjiang001/ATC-Simulator" target="_blank" rel="noopener noreferrer" class="edition-link">前往 GitHub · 获取源码 <span aria-hidden="true">↗</span></a></article>
+      </div>
+    </section>
+
+    <section class="legacy-section" id="legacy" aria-labelledby="legacy-title">
+      <div class="section-shell legacy-heading reveal"><div><span class="section-eyebrow mono">WHERE IT STARTED / 最初的频率</span><h2 id="legacy-title">从 1.0 出发，向 2.0 进近。</h2><p>保留最初的四帧画面，记录这次升级的起点。以下为 1.0 历史截图。</p></div><button id="legacy-toggle" class="small-control" aria-pressed="false">Ⅱ 暂停轮播</button></div>
+      <div class="legacy-viewport section-shell" id="legacy-viewport" role="region" aria-label="ATC1.0 历史截图横向轮播" tabindex="0">
+        <div class="legacy-track" id="legacy-track">
+          <button class="legacy-frame" data-zoom="assets/legacy/welcome.png" data-caption="ATC 1.0 · 欢迎页面"><img loading="lazy" src="assets/legacy/welcome.png" width="360" height="200" alt="ATC1.0 欢迎页面历史截图"><span><b class="mono">1.0 / 01</b> 欢迎页面 <i aria-hidden="true">↗</i></span></button>
+          <button class="legacy-frame" data-zoom="assets/legacy/gameplay.png" data-caption="ATC 1.0 · 游戏玩法"><img loading="lazy" src="assets/legacy/gameplay.png" width="360" height="200" alt="ATC1.0 游戏玩法历史截图"><span><b class="mono">1.0 / 02</b> 游戏玩法 <i aria-hidden="true">↗</i></span></button>
+          <button class="legacy-frame" data-zoom="assets/legacy/rules.png" data-caption="ATC 1.0 · 游戏规则"><img loading="lazy" src="assets/legacy/rules.png" width="360" height="200" alt="ATC1.0 游戏规则历史截图"><span><b class="mono">1.0 / 03</b> 游戏规则 <i aria-hidden="true">↗</i></span></button>
+          <button class="legacy-frame" data-zoom="assets/legacy/features.png" data-caption="ATC 1.0 · 功能特点"><img loading="lazy" src="assets/legacy/features.png" width="360" height="200" alt="ATC1.0 功能特点历史截图"><span><b class="mono">1.0 / 04</b> 功能特点 <i aria-hidden="true">↗</i></span></button>
+        </div>
+      </div>
+    </section>
+  <section class="checklist-section" id="checklist">
+    <h2>电子检查单软件介绍</h2>
+    <div class="checklist-img">
+      <img loading="lazy" width="900" src="assets/legacy/checklist1.png" alt="飞机电子检查单">
+      <img loading="lazy" width="900" src="assets/legacy/checklist2.png" alt="程序员自律清单">
+    </div>
+    <div class="checklist-text">
+      <p><strong>专业规范·高效执行</strong><br>
+      《电子检查单》是一款融合了航空航天等特种行业标准执行规范的任务管理和检查软件。将飞行检查单的严谨流程和空中交通管理专业领域的最佳实践，转化为人人可用的高效工作管理工具。</p>
+
+      <p><strong>核心特色</strong><br>
+      • 标准化流程：借鉴飞行和管制专业检查单的严谨结构，将复杂任务转化为可执行的标准步骤<br>
+      • 强制执行机制：确保每个环节都经过确认，防止遗漏关键步骤<br>
+      • 灵活模板系统：内置多种行业模板，同时支持自定义创建，适应不同工作场景<br>
+      • 直观操作界面：简洁清晰的用户界面，降低使用门槛，提高执行效率</p>
+
+      <p><strong>适用场景</strong><br>
+      工作管理、时间规划、流程执行、安全检查</p>
+
+      <p><strong>为什么选择《电子检查单》</strong><br>
+      在当今快节奏的工作环境中，高效且无误的任务执行变得尤为重要。《电子检查单》通过将航空等高风险行业的标准化流程引入日常工作，帮助用户：<br>
+      - 减少执行偏差，提高工作质量<br>
+      - 降低认知负荷，专注核心任务<br>
+      - 建立可靠系统，形成高效习惯<br>
+      - 实现结构化思考，优化工作方法</p>
+
+      <p><strong>版本信息</strong><br>
+      电子检查单 V1.10 版</p>
+    </div>
+  </section>
+  </main>
+  <section class="contact-section" id="contact">
+    <h2>联系我们</h2>
+    <div class="contact-info">
+      <span>邮箱：<a href="mailto:351166690@qq.com">351166690@qq.com</a></span>
+      <span>QQ：351166690</span>
+    </div>
+  </section>  <footer id="about">由 BIG JIANG STUDIO 设计开发</footer>
+  <dialog id="image-viewer" aria-label="截图预览"><div class="viewer-toolbar"><p id="viewer-caption"></p><button id="viewer-close" aria-label="关闭截图预览">关闭 ✕</button></div><img id="viewer-image" alt=""><p class="viewer-help">按 Esc 关闭 · 点击图片外区域返回</p></dialog>
+</body>
+</html>

@@ -1,0 +1,5 @@
+# Windows / Intel macOS; isolated from SenseVoice/Kokoro.
+qwen-tts==0.1.1
+soundfile>=0.12.1
+librosa>=0.11.0
+audiotsm==0.1.2

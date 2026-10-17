@@ -1,4 +1,4 @@
-name: Test and deploy GitHub Pages
+name: Test and deploy ATC2.0
 
 on:
   push:
@@ -29,9 +29,11 @@ jobs:
         uses: actions/configure-pages@v5
       - name: Install dependencies
         run: npm ci
+      - name: Check types
+        run: npm run typecheck
       - name: Run regression tests
         run: npm test
-      - name: Build
+      - name: Build ATC2.0 site and browser game
         run: npm run build
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

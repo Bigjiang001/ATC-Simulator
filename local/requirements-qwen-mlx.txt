@@ -1,0 +1,6 @@
+# Apple Silicon only; isolated from SenseVoice/Kokoro.
+mlx-audio==0.5.9
+soundfile>=0.12.1
+librosa>=0.11.0
+einops>=0.8.0
+audiotsm==0.1.2

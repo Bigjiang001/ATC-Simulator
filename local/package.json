@@ -1,0 +1,37 @@
+{
+  "name": "atc-command-v9",
+  "version": "9.0.0",
+  "private": true,
+  "description": "ATC COMMAND V9.0 - Air Traffic Control Simulator with SenseVoice Small + Aviation Phraseology Normalizer + Kokoro TTS",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "node scripts/build-standalone.cjs",
+    "build:vite": "tsc && vite build",
+    "build:standalone": "node scripts/build-standalone.cjs",
+    "preview": "vite preview",
+    "test": "node scripts/run-unit-tests.cjs && node scripts/test-gameplay.cjs && node scripts/test-ui-language.cjs && node scripts/test-local-tts.cjs && node scripts/test-voice-settings.cjs",
+    "test:vitest": "vitest run",
+    "test:e2e": "playwright test",
+    "test:ui": "node scripts/test-ui-language.cjs",
+    "test:gameplay": "node scripts/test-gameplay.cjs"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "zustand": "^4.5.2"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.24.0",
+    "@babel/preset-env": "^7.24.0",
+    "@babel/preset-react": "^7.24.0",
+    "@babel/preset-typescript": "^7.24.0",
+    "@playwright/test": "^1.44.0",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "typescript": "^5.4.5",
+    "vite": "^5.2.11",
+    "vitest": "^1.6.0"
+  }
+}

@@ -1,0 +1,1539 @@
+:root {
+  --bg-deep: #04080d;
+  --bg-panel: #08111a;
+  --bg-card: #0c1824;
+  --bg-card-hover: #112233;
+  --border-dim: rgba(0, 229, 163, 0.2);
+  --border-bright: rgba(0, 229, 163, 0.55);
+  --radar-green: #00e5a3;
+  --radar-cyan: #38bdf8;
+  --radar-amber: #fbbf24;
+  --radar-red: #ef4444;
+  --text-main: #e2e8f0;
+  --text-muted: #94a3b8;
+  --font-mono: "JetBrains Mono", "SFMono-Regular", Menlo, Monaco, Consolas, monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body,
+#root {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background-color: var(--bg-deep);
+  color: var(--text-main);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.mono {
+  font-family: var(--font-mono);
+}
+
+.accent-green {
+  color: var(--radar-green) !important;
+}
+
+.accent-cyan {
+  color: var(--radar-cyan) !important;
+}
+
+.accent-amber {
+  color: var(--radar-amber) !important;
+}
+
+.accent-red {
+  color: var(--radar-red) !important;
+}
+
+/* 整体五区管制工作站布局 */
+.atc-workstation {
+  display: grid;
+  grid-template-rows: 52px 1fr 136px;
+  width: 100vw;
+  height: 100vh;
+  background: var(--bg-deep);
+}
+
+/* 顶部状态栏 (区域 4) */
+.atc-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 12px;
+  background: linear-gradient(180deg, #0b1724 0%, #071019 100%);
+  border-bottom: 1px solid var(--border-dim);
+  gap: 8px;
+  overflow: hidden;
+}
+
+.topbar-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.radar-pulse-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--radar-green);
+  box-shadow: 0 0 10px var(--radar-green);
+  flex-shrink: 0;
+}
+
+.brand-title {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: var(--radar-green);
+}
+
+.brand-sub {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+
+.topbar-metrics {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+
+.metric-box {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 2px 7px;
+  background: rgba(12, 24, 36, 0.85);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.metric-alert-active {
+  background: rgba(127, 29, 29, 0.45);
+  border-color: var(--radar-red);
+}
+
+.metric-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.metric-val {
+  font-size: 12px;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  background: #060d14;
+  padding: 2px;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.btn-chip {
+  background: transparent;
+  color: var(--text-muted);
+  border: none;
+  padding: 4px 7px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.12s ease;
+}
+
+.btn-chip:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.btn-chip.active {
+  background: rgba(0, 229, 163, 0.2);
+  color: var(--radar-green);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(0, 229, 163, 0.45);
+}
+
+.btn-chip.active-warn {
+  background: rgba(245, 158, 11, 0.25);
+  color: var(--radar-amber);
+  font-weight: 700;
+  box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.5);
+}
+
+/* 中央主区域 */
+.atc-main-body {
+  display: grid;
+  grid-template-columns: 1fr 440px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 区域 1：中央雷达区 */
+.radar-Workspace {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: #050b10;
+  overflow: hidden;
+  border-right: 1px solid var(--border-dim);
+}
+
+.radar-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  cursor: crosshair;
+}
+
+.radar-overlay-Controls {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  z-index: 5;
+}
+
+.overlay-btn {
+  background: rgba(8, 17, 26, 0.85);
+  color: var(--text-muted);
+  border: 1px solid rgba(0, 229, 163, 0.28);
+  padding: 4px 9px;
+  font-size: 11px;
+  font-family: var(--font-mono);
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.overlay-btn:hover {
+  color: #fff;
+  border-color: var(--radar-green);
+}
+
+.overlay-btn.active {
+  background: rgba(0, 229, 163, 0.16);
+  color: var(--radar-green);
+  border-color: var(--radar-green);
+}
+
+/* AMAN 进港排序时间轴浮窗 */
+.aman-timeline-card {
+  position: absolute;
+  top: 46px;
+  left: 12px;
+  width: 228px;
+  background: rgba(7, 16, 25, 0.9);
+  border: 1px solid rgba(0, 229, 163, 0.32);
+  border-radius: 4px;
+  padding: 6px 8px;
+  z-index: 5;
+}
+
+.aman-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--radar-green);
+  border-bottom: 1px solid rgba(0, 229, 163, 0.18);
+  padding-bottom: 4px;
+  margin-bottom: 4px;
+}
+
+.aman-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aman-item {
+  padding: 4px 6px;
+  background: rgba(12, 24, 36, 0.85);
+  border-left: 3px solid var(--radar-cyan);
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.aman-item.aman-selected {
+  background: rgba(20, 40, 60, 0.95);
+  border-left-color: #ffffff;
+}
+
+.aman-item.aman-emergency {
+  border-left-color: var(--radar-red);
+  background: rgba(85, 16, 22, 0.75);
+}
+
+.aman-row-top {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 1px;
+}
+
+.aman-rank {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+.aman-rwy {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 0 4px;
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--radar-cyan);
+  border-radius: 2px;
+}
+
+.aman-eta {
+  margin-left: auto;
+  color: var(--radar-green);
+  font-weight: 700;
+}
+
+.aman-row-sub {
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+
+.radar-overlay-right {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 295px;
+  z-index: 5;
+  pointer-events: none;
+}
+
+.stca-banner {
+  background: rgba(127, 29, 29, 0.92);
+  border: 1px solid #ef4444;
+  border-radius: 4px;
+  padding: 8px 10px;
+  color: #fecaca;
+  font-family: var(--font-mono);
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
+}
+
+.stca-title {
+  font-size: 11px;
+  font-weight: 800;
+  color: #ffffff;
+  margin-bottom: 4px;
+}
+
+.stca-item {
+  font-size: 10.5px;
+  padding: 2px 0;
+}
+
+.selected-hud-card {
+  background: rgba(8, 17, 26, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-family: var(--font-mono);
+}
+
+.hud-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.hud-callsign {
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.hud-badge {
+  font-size: 9.5px;
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  color: var(--text-main);
+}
+
+.hud-cat {
+  margin-left: auto;
+  font-size: 9.5px;
+  padding: 1px 6px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.cat-arr {
+  background: rgba(0, 229, 163, 0.18);
+  color: var(--radar-green);
+}
+
+.cat-dep {
+  background: rgba(251, 191, 36, 0.18);
+  color: var(--radar-amber);
+}
+
+.hud-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.hud-grid small {
+  display: block;
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+/* 右侧边栏：进程单 + 指令面板 */
+.atc-right-sidebar {
+  display: grid;
+  grid-template-rows: 34% 66%;
+  min-height: 0;
+  background: var(--bg-panel);
+  overflow: hidden;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 5px 10px;
+  background: #0b1723;
+  border-bottom: 1px solid var(--border-dim);
+  gap: 6px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.panel-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--radar-cyan);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 区域 2：电子进程单 (Flight Strips) */
+.flight-strip-bay {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-bottom: 1px solid var(--border-dim);
+}
+
+.strip-tabs {
+  display: flex;
+  gap: 3px;
+}
+
+.tab-btn {
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 2px 6px;
+  font-size: 9.5px;
+  border-radius: 3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.tab-btn.active {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--radar-cyan);
+  border-color: var(--radar-cyan);
+  font-weight: 700;
+}
+
+.strip-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.strip-empty {
+  text-align: center;
+  padding: 20px 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.flight-strip {
+  padding: 5px 8px;
+  background: var(--bg-card);
+  border-left: 4px solid var(--radar-green);
+  border-top: 1px solid rgba(148, 163, 184, 0.14);
+  border-right: 1px solid rgba(148, 163, 184, 0.14);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.1s ease;
+}
+
+.flight-strip:hover {
+  background: var(--bg-card-hover);
+}
+
+.flight-strip.strip-dep {
+  border-left-color: var(--radar-amber);
+}
+
+.flight-strip.strip-selected {
+  background: #14283c;
+  border-top-color: #ffffff;
+  border-right-color: #ffffff;
+  border-bottom-color: #ffffff;
+  box-shadow: 0 0 8px rgba(56, 189, 248, 0.3);
+}
+
+.flight-strip.strip-conflict {
+  background: rgba(95, 18, 18, 0.65);
+  border-color: var(--radar-red);
+}
+
+.strip-row-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.strip-id-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.strip-callsign {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 800;
+  color: #ffffff;
+}
+
+.strip-model {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 0 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  color: var(--radar-cyan);
+}
+
+.strip-airline {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10.5px;
+  color: var(--text-muted);
+}
+
+.strip-airline-name {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.strip-airline-logo {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  object-fit: contain;
+  vertical-align: middle;
+  flex-shrink: 0;
+  box-shadow: 0 0 4px rgba(56, 189, 248, 0.35);
+}
+
+.strip-squawk {
+  color: var(--text-muted);
+}
+
+.strip-phase-badge {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  font-weight: 700;
+}
+
+.phase-arr {
+  background: rgba(0, 229, 163, 0.16);
+  color: var(--radar-green);
+}
+
+.phase-dep,
+.phase-tkof {
+  background: rgba(251, 191, 36, 0.2);
+  color: var(--radar-amber);
+}
+
+.phase-gnd {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+}
+
+.phase-ils,
+.phase-ils-lock {
+  background: rgba(56, 189, 248, 0.24);
+  color: var(--radar-cyan);
+}
+
+.phase-hold {
+  background: rgba(168, 85, 247, 0.25);
+  color: #d8b4fe;
+}
+
+.phase-warn {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.phase-done,
+.phase-land {
+  background: rgba(34, 197, 94, 0.25);
+  color: #86efac;
+}
+
+.strip-row-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  font-size: 11px;
+  color: #cbd5e1;
+  margin-bottom: 2px;
+}
+
+.m-lbl {
+  color: var(--text-muted);
+  font-size: 9.5px;
+}
+
+.m-arrow {
+  color: var(--text-muted);
+  margin: 0 2px;
+}
+
+.strip-row-bottom {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--text-muted);
+}
+
+.strip-cmd-tag {
+  color: var(--radar-green);
+}
+
+/* 区域 3：管制指令台 (Command Panel) */
+.command-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #071018;
+}
+
+.cmd-target-status {
+  font-size: 10.5px;
+  color: var(--radar-green);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.cmd-empty {
+  padding: 28px 14px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.cmd-sections {
+  flex: 1;
+  overflow-y: auto;
+  padding: 5px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.cmd-block {
+  background: rgba(12, 24, 36, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.14);
+  border-radius: 4px;
+  padding: 5px 7px;
+}
+
+.highlight-block {
+  border-color: rgba(56, 189, 248, 0.35);
+  background: rgba(12, 28, 44, 0.85);
+}
+
+.cmd-block-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 4px;
+  letter-spacing: 0.3px;
+}
+
+.clearance-actions {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  gap: 5px;
+  margin-top: 3px;
+}
+
+.btn-action {
+  padding: 5px 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  background: #102030;
+  color: #e2e8f0;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.btn-action:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.btn-action:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-ils-ready {
+  background: rgba(0, 229, 163, 0.22);
+  border-color: var(--radar-green);
+  color: var(--radar-green);
+}
+
+.btn-ils-active {
+  background: rgba(56, 189, 248, 0.28);
+  border-color: var(--radar-cyan);
+  color: #ffffff;
+}
+
+.btn-takeoff-ready {
+  background: rgba(251, 191, 36, 0.25);
+  border-color: var(--radar-amber);
+  color: var(--radar-amber);
+}
+
+.btn-handoff-ready {
+  background: rgba(56, 189, 248, 0.3);
+  border-color: var(--radar-cyan);
+  color: #ffffff;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.35);
+}
+
+.btn-warn {
+  background: rgba(239, 68, 68, 0.18);
+  border-color: rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+}
+
+.ils-status-hint {
+  margin-top: 4px;
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.hint-ok {
+  color: var(--radar-green);
+}
+
+.hint-warn {
+  color: var(--radar-amber);
+}
+
+.btn-grid-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 3px;
+}
+
+.btn-cmd {
+  flex: 1 1 auto;
+  min-width: 48px;
+  max-width: 100%;
+  padding: 4px 6px;
+  background: #0e1c2a;
+  color: #cbd5e1;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.btn-cmd:hover {
+  background: #172e44;
+  color: #ffffff;
+  border-color: var(--radar-cyan);
+}
+
+.btn-cmd.active {
+  background: rgba(0, 229, 163, 0.22);
+  color: var(--radar-green);
+  border-color: var(--radar-green);
+  font-weight: 700;
+}
+
+.btn-cmd.active-warn {
+  background: rgba(251, 191, 36, 0.22);
+  color: var(--radar-amber);
+  border-color: var(--radar-amber);
+  font-weight: 700;
+}
+
+.custom-input-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
+.cmd-num-input {
+  width: 72px;
+  padding: 3px 6px;
+  background: #050b11;
+  color: var(--radar-green);
+  border: 1px solid rgba(0, 229, 163, 0.35);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.cmd-cli-bar {
+  display: flex;
+  gap: 5px;
+  margin-top: 1px;
+}
+
+.cli-input {
+  flex: 1;
+  padding: 4px 8px;
+  background: #04090e;
+  color: var(--radar-green);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.btn-cli-send {
+  padding: 4px 10px;
+  background: rgba(56, 189, 248, 0.22);
+  color: var(--radar-cyan);
+  border: 1px solid var(--radar-cyan);
+  border-radius: 3px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.cli-feedback {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: var(--radar-cyan);
+}
+
+/* 区域 5：底部可拖拽缩放的无线电通信日志 */
+.radio-comm-panel {
+  display: flex;
+  flex-direction: column;
+  background: #050b11;
+  border-top: 1px solid var(--border-dim);
+  min-height: 0;
+}
+
+.comm-resize-handle {
+  height: 15px;
+  background: linear-gradient(180deg, #0d1d2c 0%, #08121c 100%);
+  border-bottom: 1px solid rgba(0, 229, 163, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ns-resize;
+  flex-shrink: 0;
+}
+
+.comm-resize-handle:hover {
+  background: rgba(0, 229, 163, 0.18);
+}
+
+.resize-grip-dots {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--radar-cyan);
+  letter-spacing: 0.5px;
+}
+
+.comm-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 3px 12px;
+  background: #09131d;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+  flex-shrink: 0;
+}
+
+.comm-title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--radar-green);
+}
+
+.comm-size-btns {
+  display: flex;
+  gap: 4px;
+}
+
+.btn-comm-size {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 3px;
+  padding: 1px 6px;
+  font-size: 9.5px;
+  cursor: pointer;
+}
+
+.btn-comm-size:hover {
+  color: #fff;
+  border-color: var(--radar-cyan);
+}
+
+.comm-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.comm-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.comm-time {
+  color: var(--text-muted);
+  font-size: 9.5px;
+  flex-shrink: 0;
+}
+
+.comm-badge {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  padding: 0 5px;
+  border-radius: 2px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.badge-atc {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--radar-cyan);
+}
+
+.badge-pilot {
+  background: rgba(0, 229, 163, 0.2);
+  color: var(--radar-green);
+}
+
+.badge-alert {
+  background: rgba(239, 68, 68, 0.3);
+  color: #fca5a5;
+}
+
+.badge-system {
+  background: rgba(148, 163, 184, 0.2);
+  color: #cbd5e1;
+}
+
+.comm-text-en {
+  color: #f8fafc;
+  font-weight: 600;
+}
+
+.comm-text-cn {
+  color: var(--text-muted);
+}
+
+.comm-alert .comm-text-en,
+.comm-alert .comm-text-cn {
+  color: #fca5a5;
+}
+
+/* 弹窗与设置中心样式 */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 12, 0.84);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 18px;
+}
+
+.modal-card {
+  width: 100%;
+  max-width: 560px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  background: #091420;
+  border: 1px solid var(--radar-cyan);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+}
+
+.modal-wide {
+  max-width: 780px;
+}
+
+.modal-xl {
+  max-width: 920px;
+}
+
+.modal-banner {
+  padding: 12px 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  flex-shrink: 0;
+}
+
+.banner-victory {
+  background: linear-gradient(135deg, rgba(0, 229, 163, 0.25), rgba(56, 189, 248, 0.15));
+}
+
+.banner-gameover {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.32), rgba(127, 29, 29, 0.25));
+}
+
+.banner-info {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.25), rgba(15, 23, 42, 0.4));
+}
+
+.modal-kicker {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--radar-cyan);
+  margin-bottom: 3px;
+}
+
+.modal-heading {
+  font-size: 17px;
+  color: #ffffff;
+}
+
+.settings-scroll-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.settings-card {
+  background: rgba(5, 11, 17, 0.72);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  border-radius: 6px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.settings-card h3 {
+  font-size: 12.5px;
+  color: var(--radar-green);
+  border-bottom: 1px solid rgba(0, 229, 163, 0.16);
+  padding-bottom: 4px;
+}
+
+.setting-row-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.setting-label {
+  font-size: 11px;
+  color: #cbd5e1;
+  font-weight: 600;
+}
+
+.setting-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.airport-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.airport-select-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 8px 10px;
+  background: #0c1824;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  border-radius: 5px;
+  cursor: pointer;
+  text-align: left;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.airport-select-card:hover {
+  border-color: var(--radar-cyan);
+}
+
+.airport-select-card.active {
+  background: rgba(0, 229, 163, 0.16);
+  border-color: var(--radar-green);
+  box-shadow: inset 0 0 0 1px var(--radar-green);
+}
+
+.ap-code {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--radar-green);
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-name {
+  font-size: 12px;
+  font-weight: 700;
+  color: #ffffff;
+  margin-top: 2px;
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ap-sub {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+  width: 100%;
+  line-height: 1.3;
+  word-break: break-word;
+}
+
+.voice-role-box {
+  background: rgba(12, 24, 36, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 5px;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.voice-role-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--radar-cyan);
+}
+
+.btn-voice-preview {
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--radar-cyan);
+  border: 1px solid var(--radar-cyan);
+  border-radius: 3px;
+  padding: 2px 7px;
+  font-size: 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.voice-select-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.voice-dropdown {
+  flex: 1;
+  min-width: 0;
+  background: #060d14;
+  color: #e2e8f0;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 3px;
+  padding: 3px 6px;
+  font-size: 11px;
+}
+
+.modal-desc {
+  padding: 14px 20px 4px;
+  color: #cbd5e1;
+  line-height: 1.5;
+}
+
+.score-summary-box {
+  display: grid;
+  grid-template-columns: 130px 1fr;
+  gap: 16px;
+  margin: 14px 20px;
+  padding: 14px;
+  background: rgba(5, 11, 17, 0.75);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 6px;
+}
+
+.grade-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 229, 163, 0.1);
+  border: 1px solid rgba(0, 229, 163, 0.35);
+  border-radius: 6px;
+  padding: 10px;
+  text-align: center;
+}
+
+.grade-badge strong {
+  font-family: var(--font-mono);
+  font-size: 42px;
+  color: var(--radar-green);
+  line-height: 1.1;
+}
+
+.grade-badge small {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 4px;
+}
+
+.score-details {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+}
+
+.score-line {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  border-bottom: 1px dashed rgba(148, 163, 184, 0.15);
+  padding-bottom: 3px;
+}
+
+.help-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  padding: 16px 20px;
+  overflow-y: auto;
+}
+
+.help-section {
+  background: rgba(5, 11, 17, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 6px;
+  padding: 12px;
+}
+
+.help-section h3 {
+  font-size: 13px;
+  color: var(--radar-green);
+  margin-bottom: 8px;
+}
+
+.help-section ul {
+  padding-left: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: #cbd5e1;
+  line-height: 1.45;
+  font-size: 12px;
+}
+
+.help-section code {
+  font-family: var(--font-mono);
+  background: rgba(56, 189, 248, 0.15);
+  color: var(--radar-cyan);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 18px;
+  background: #060d15;
+  border-top: 1px solid rgba(148, 163, 184, 0.15);
+  flex-shrink: 0;
+}
+
+.btn-primary {
+  padding: 8px 16px;
+  background: var(--radar-green);
+  color: #041014;
+  border: none;
+  border-radius: 4px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-secondary {
+  padding: 8px 16px;
+  background: rgba(56, 189, 248, 0.2);
+  color: var(--radar-cyan);
+  border: 1px solid var(--radar-cyan);
+  border-radius: 4px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* 实时新手教练引导条与成就解锁弹窗 */
+.rookie-coach-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  max-width: 78%;
+  background: rgba(6, 22, 34, 0.92);
+  border: 1px solid rgba(0, 229, 163, 0.55);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: #e2e8f0;
+  font-size: 11.5px;
+  line-height: 1.4;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+  z-index: 15;
+}
+
+.achievement-toast {
+  position: absolute;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: linear-gradient(135deg, rgba(6, 38, 32, 0.96), rgba(9, 24, 38, 0.96));
+  border: 1.5px solid #00e5a3;
+  border-radius: 8px;
+  padding: 10px 16px;
+  box-shadow: 0 8px 28px rgba(0, 229, 163, 0.28);
+  cursor: pointer;
+  z-index: 30;
+}
+
+.ach-icon {
+  font-size: 26px;
+}
+
+.ach-kicker {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  color: #00e5a3;
+  letter-spacing: 0.6px;
+}
+
+.ach-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.ach-desc {
+  font-size: 11px;
+  color: #cbd5e1;
+}
+
+/* V8.0 按住 Shift 话筒语音指挥状态浮窗 */
+.voice-ptt-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 52px;
+  transform: translateX(-50%);
+  min-width: 340px;
+  max-width: 75%;
+  background: rgba(15, 23, 42, 0.95);
+  border: 1.5px solid #38bdf8;
+  border-radius: 8px;
+  padding: 8px 16px;
+  color: #f8fafc;
+  font-size: 12px;
+  box-shadow: 0 8px 28px rgba(56, 189, 248, 0.35);
+  z-index: 22;
+  pointer-events: none;
+}
+
+.voice-ptt-banner.listening {
+  border-color: #ef4444;
+  background: rgba(69, 10, 10, 0.94);
+  box-shadow: 0 0 24px rgba(239, 68, 68, 0.55);
+}
+
+/* English labels need room to wrap without hiding settings/help controls. */
+html[lang="en"] .atc-topbar {
+  flex-wrap: wrap;
+  row-gap: 3px;
+  padding-top: 4px;
+  padding-bottom: 4px;
+  min-height: 52px;
+}
+html[lang="en"] .topbar-controls {
+  flex-wrap: wrap;
+  flex-shrink: 1;
+  min-width: 0;
+}
+html[lang="en"] .atc-right-sidebar {
+  grid-template-columns: minmax(0, 1fr);
+}
+html[lang="en"] .flight-strip-bay,
+html[lang="en"] .command-panel,
+html[lang="en"] .cmd-sections,
+html[lang="en"] .cmd-block {
+  min-width: 0;
+  max-width: 100%;
+}
+html[lang="en"] .panel-header,
+html[lang="en"] .strip-tabs,
+html[lang="en"] .strip-row-top,
+html[lang="en"] .strip-id-group {
+  flex-wrap: wrap;
+  row-gap: 3px;
+}
+html[lang="en"] .btn-cmd,
+html[lang="en"] .btn-action {
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+html[lang="en"] .clearance-actions {
+  grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr);
+}
+html[lang="en"] .ils-status-hint,
+html[lang="en"] .cmd-block-label {
+  overflow-wrap: anywhere;
+}
+/* Gradual mission progression and contextual voice help. */
+.mission-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 8px; }
+.mission-card { display: flex; flex-direction: column; gap: 6px; padding: 10px; text-align: left; color: var(--text-main); background: #0b1b28; border: 1px solid var(--border-dim); border-radius: 5px; cursor: pointer; }
+.mission-card.recommended { border-color: var(--radar-green); background: #08342c; }
+.mission-card strong { color: var(--radar-cyan); }
+.mission-card span, .mission-card small, .mission-picker p { font-size: 11px; line-height: 1.45; }
+.mission-card:disabled { opacity: .48; cursor: not-allowed; }
+.mission-status { position: absolute; top: 52px; left: 12px; z-index: 12; max-width: min(460px, 92%); padding: 8px 10px; background: rgba(6, 25, 35, .94); border: 1px solid var(--radar-cyan); border-radius: 5px; display: flex; flex-wrap: wrap; gap: 6px; font-size: 11px; }
+.mission-status div { display: flex; width: 100%; justify-content: space-between; gap: 10px; color: var(--radar-green); }
+.mission-status small { flex: 1 1 200px; }
+.mission-debrief { margin: 8px 16px; flex-shrink: 0; font-size: 12px; }
+.voice-assist-panel { display: flex; flex-direction: column; gap: 5px; background: #09232a; border: 1px solid rgba(56,189,248,.4); border-radius: 4px; padding: 8px; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; }
+.voice-assist-panel strong { color: var(--radar-cyan); }
+.voice-assist-panel small { color: #b4c4d0; }
+.btn-primary:disabled, .btn-secondary:disabled { opacity: .45; cursor: not-allowed; }
+.settlement-review-bar {
+  position: fixed; z-index: 40; left: 50%; transform: translateX(-50%);
+  max-width: calc(100vw - 32px); padding: 12px 16px; border: 1px solid #38bdf8;
+  background: #082132; border-radius: 8px; display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 8px 28px #0009; color: #e0f2fe;
+}
+
+/* Local voice catalog and per-role tempo controls. */
+.voice-select-label { display: block; color: #a9bcc4; font-size: 11px; margin: 12px 0 7px; line-height: 1.6; }
+.voice-role-box > .voice-dropdown { display:block; width:100%; min-width:0; max-width:100%; height:38px; font-size:11px; }
+.voice-description { display:flex; flex-direction:column; gap:5px; padding:11px 12px; background:#081c28; border:1px solid #264452; border-radius:4px; margin:10px 0 14px; color:#b6c9cc; line-height:1.55; font-size:11px; }
+.voice-description strong { color:#79d7c5; font-size:10px; }
+.voice-rate-header { display:flex; gap:12px; align-items:center; font-size:12px; color:#b9cdd0; }
+.voice-rate-header output { color:#a4efd9; font-family:monospace; margin-left:auto; font-size:15px; }
+.voice-rate-slider { display:block; width:100%; margin:13px 0 8px; accent-color:#00dba5; cursor:pointer; min-height:22px; }
+.voice-rate-scale { display:flex; gap:10px; justify-content:space-between; font-size:10px; color:#869eaa; line-height:1.7; }
+.voice-preview-actions { display:flex; gap:8px; margin-top:16px; }
+.voice-preview-actions > button { flex:1; min-height:34px; }
+.voice-catalog-note { color:#93aeb7; font-size:11px; line-height:1.9; margin:12px 0 17px; padding:11px 14px; border-left:2px solid #3f907c; background:#0b202b; }
+@media(max-width:700px) { .voice-role-header { flex-wrap:wrap; } .voice-rate-scale { font-size:9px; } }
