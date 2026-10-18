@@ -1,0 +1,16 @@
+name: Windows launcher regression
+on:
+  push:
+    branches: [fix/windows-launcher-20261018]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Test Windows PowerShell 5.1 launcher
+        shell: powershell
+        run: ./local/scripts/test-windows-launcher.ps1
