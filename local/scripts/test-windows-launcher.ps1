@@ -51,6 +51,7 @@ foreach ($name in @('launch_windows.ps1', 'setup_qwen.py', 'launch_atc.py')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $fixture 'scripts') -Force
 }
 $env:ATC_NO_PAUSE = '1'
+$env:ATC_PYTHON_TRACE = '1'
 $savedPath = $env:PATH
 try {
     $env:PATH = $env:SystemRoot + '\System32'

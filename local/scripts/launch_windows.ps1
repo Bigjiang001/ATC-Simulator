@@ -28,14 +28,15 @@ function Test-Python {
     }
     # WindowsApps python.exe may open the Microsoft Store instead of running Python.
     if ($Executable -match '\\WindowsApps\\') { return $null }
-    # Single quotes inside Python code survive Windows PowerShell 5.1 native quoting.
-    $probe = 'import sys,struct,platform; assert sys.platform == ''win32''; assert platform.python_implementation() == ''CPython''; assert (3,10) <= sys.version_info[:2] < (3,14); assert struct.calcsize(''P'') == 8; print(sys.executable)'
+    # Return the path as ASCII base64: PS 5.1/OEM decoding can corrupt non-ASCII paths.
+    $probe = 'import sys,struct,platform,base64; assert sys.platform == ''win32''; assert platform.python_implementation() == ''CPython''; assert (3,10) <= sys.version_info[:2] < (3,14); assert struct.calcsize(''P'') == 8; print(base64.b64encode(sys.executable.encode(''utf-8'')).decode(''ascii''))'
     $savedPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
         $result = @(& $Executable @Selector -I -c $probe 2>$null)
+        if ($env:ATC_PYTHON_TRACE -eq '1') { Write-Host ('[TRACE] Probe ' + $Executable + ': exit=' + $LASTEXITCODE + ', lines=' + $result.Count) }
         if ($LASTEXITCODE -eq 0 -and $result.Count -gt 0) {
-            $resolved = ([string]$result[-1]).Trim()
+            $resolved = [Text.Encoding]::UTF8.GetString([Convert]::FromBase64String(([string]$result[-1]).Trim()))
             if (Test-Path -LiteralPath $resolved -PathType Leaf) { return $resolved }
         }
     } catch {
