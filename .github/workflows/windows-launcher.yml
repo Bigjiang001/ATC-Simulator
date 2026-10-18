@@ -1,7 +1,7 @@
 name: Windows launcher regression
 on:
   push:
-    branches: [fix/windows-launcher-20261018]
+    branches: [main, fix/windows-launcher-20261018]
   workflow_dispatch:
 permissions:
   contents: read
