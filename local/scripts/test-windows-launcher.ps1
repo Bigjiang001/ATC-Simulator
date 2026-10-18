@@ -47,7 +47,7 @@ New-Item -ItemType Directory -Path (Join-Path $fixture 'scripts') -Force | Out-N
 foreach ($name in @('ATC_Launcher_Windows11.bat', 'requirements.txt', 'atc_ai_server.py', 'atc_command_simulator.html')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination (Join-Path $fixture $name) -Force
 }
-foreach ($name in @('launch_windows.ps1', 'setup_qwen.py', 'launch_atc.py')) {
+foreach ($name in @('launch_windows.ps1', 'setup_qwen.py', 'ensure_cuda.py', 'launch_atc.py')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $fixture 'scripts') -Force
 }
 $env:ATC_NO_PAUSE = '1'
@@ -81,7 +81,7 @@ New-Item -ItemType Directory -Path (Join-Path $failure 'scripts') -Force | Out-N
 foreach ($name in @('requirements.txt', 'atc_ai_server.py', 'atc_command_simulator.html')) {
     Copy-Item -LiteralPath (Join-Path $root $name) -Destination $failure -Force
 }
-foreach ($name in @('setup_qwen.py', 'launch_atc.py')) {
+foreach ($name in @('setup_qwen.py', 'ensure_cuda.py', 'launch_atc.py')) {
     Copy-Item -LiteralPath (Join-Path $PSScriptRoot $name) -Destination (Join-Path $failure 'scripts') -Force
 }
 $payload = [IO.File]::ReadAllText($scriptPath).Replace('if ($FunctionsOnly) { return }', "function Get-SetupFile { throw 'TEST simulated network unavailable' }`r`nif (`$FunctionsOnly) { return }")

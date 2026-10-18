@@ -7,6 +7,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import time
 from urllib.request import getproxies
 from concurrent.futures import ThreadPoolExecutor
 
@@ -111,6 +112,13 @@ def main():
         env.setdefault("PIP_CERT", certifi.where())
     except ImportError:
         pass
+    if python.exists():
+        usable = subprocess.run([str(python), "-I", "-c", "import sys; assert sys.prefix != sys.base_prefix"],
+                                env=env, capture_output=True)
+        if usable.returncode:
+            backup = env_dir.with_name(env_dir.name + ".backup-" + str(time.time_ns()))
+            env_dir.rename(backup)
+            print(f"[Qwen] Preserved unusable copied environment: {backup}", flush=True)
     if not python.exists():
         base = shutil.which("python3.12") if os.name != "nt" else None
         run([base or sys.executable, "-m", "venv", env_dir], env)
@@ -130,6 +138,9 @@ def main():
             run(command + ["--index-url", "https://pypi.tuna.tsinghua.edu.cn/simple"], env)
         run([python, "-m", "pip", "check"], env)
         marker.write_text(signature)
+    if not mlx:
+        from ensure_cuda import ensure_cuda
+        ensure_cuda(python)
     config_path = ROOT / ".atc_qwen_runtime.json"
     config = {
         "runtime": runtime, "python": python.relative_to(ROOT).as_posix(),

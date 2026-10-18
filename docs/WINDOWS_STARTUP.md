@@ -4,7 +4,7 @@
 
 ## 如何运行
 
-完整下载并解压仓库，进入 `local/`，双击 `ATC_Launcher_Windows11.bat`。不要在压缩包里直接运行，也不要只复制这一个 BAT 文件；它需要同目录的游戏文件和 `scripts/`。
+完整下载并解压仓库，进入 `local/`，双击 `ATC_Launcher_Windows.bat`。不要在压缩包里直接运行，也不要只复制这一个 BAT 文件；它需要同目录的游戏文件和 `scripts/`。
 
 新版入口由一个小型 CMD 文件调用 `scripts/launch_windows.ps1`，避免在 BAT 中混合解析大量 PowerShell 代码。
 
@@ -29,9 +29,12 @@
 在 `local/` 中打开终端执行：
 
 ```bat
-ATC_Launcher_Windows11.bat -BootstrapOnly
+ATC_Launcher_Windows.bat -BootstrapOnly
 ```
 
 它只准备并检查 Python 虚拟环境，不下载语音模型。正常游玩仍直接双击，不需要参数。
 
 自动回归脚本位于 `local/scripts/test-windows-launcher.ps1`，通过 Windows 原生 CMD 和 PowerShell 5.1 检查启动、路径、首次安装、复用以及错误日志。自动测试的覆盖范围会随每次 CI 运行结果更新，不等同于所有电脑、网络和完整模型推理均已验证。
+
+
+通用 Windows 入口支持 Windows 10/11 64 位，旧 Windows11 文件名仍可使用。复制到其他电脑时请携带完整 local 文件夹；models 中的模型可以直接复用。不要依赖复制的 .venv 环境：启动器会检查并保留失效环境，然后为当前电脑重建。首次准备需联网，目录应可写。AMD/Intel/无独立显卡使用 CPU；NVIDIA CUDA 检查失败时回退 CPU 并提示更新驱动。CPU 下中文语音合成可能较慢。

@@ -29,7 +29,7 @@ export const MissionStatus: React.FC = () => {
   return localizeUi((<div className="mission-status" data-testid="mission-status">
     <div><strong>{store.uiLanguage === 'EN' ? mission.titleEn : mission.titleCn}</strong>
       <span>着陆 {store.landedCount}/{mission.arrivals} · 移交 {store.departedCount}/{mission.departures}</span></div>
-    <small>先选航班，再按住 Shift 说话；也可点击右侧建议口令。</small>
+    <small>先选航班，再按住通话键 说话；也可点击右侧建议口令。</small>
     <small>三星目标：无冲突、无越界，{Math.floor(mission.parTimeSec / 60)} 分钟内完成；可用 2×/4× 倍速。</small>
     <button type="button" className="overlay-btn" onClick={() => store.restartGame()} data-testid="mission-retry">↻ 重试本关</button>
   </div>), store.uiLanguage) as React.ReactElement;

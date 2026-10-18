@@ -340,17 +340,17 @@ export const RadarScopeCanvas: React.FC = () => {
 
   const getRookieCoachTip = (): string => {
     if (!selectedAc) {
-      return '🎓 实时教练：点击右侧进程单或雷达上的飞机即可选中；按住 Shift 键可通过话筒语音下达指令。';
+      return '🎓 实时教练：点击右侧进程单或雷达上的飞机即可选中；按住通话键可通过话筒语音下达指令。';
     }
     if (selectedAc.inRestrictedZone) {
       return `🚨 紧急提示（${selectedAc.callsign} 闯入限制区）：请立即拖拽航向偏离红色禁航区，或点击高度层爬升至限高以上！`;
     }
     if (selectedAc.phase === 'HOLDING_GROUND' || selectedAc.phase === 'LINE_UP_WAIT') {
-      return `🎓 实时教练（${selectedAc.callsign} 地面等待）：可按住 Shift 说“可以起飞”，或直接点击【CLEARED TAKEOFF ${selectedAc.assignedRunway}】放行起飞。`;
+      return `🎓 实时教练（${selectedAc.callsign} 地面等待）：可按住通话键 说“可以起飞”，或直接点击【CLEARED TAKEOFF ${selectedAc.assignedRunway}】放行起飞。`;
     }
     if (selectedAc.category === 'DEPARTURE') {
       if (selectedAc.canHandoff) {
-        return `🎓 实时教练（${selectedAc.callsign} 达到移交条件）：按住 Shift 说“移交”或点击右下角【★ HANDOFF 移交】完成离场移交！`;
+        return `🎓 实时教练（${selectedAc.callsign} 达到移交条件）：按住通话键 说“移交”或点击右下角【★ HANDOFF 移交】完成离场移交！`;
       }
       return `🎓 实时教练（${selectedAc.callsign} 离场爬升中）：过 360m 后将自动切入 ${selectedAc.assignedExitId || 'SID'} 离场航线并爬升至 ${formatAltitudeValue(6000, altUnit)} 移交层。`;
     }
@@ -362,9 +362,9 @@ export const RadarScopeCanvas: React.FC = () => {
     }
     const ils = checkIlsConditions(selectedAc, store.airport, selectedAc.assignedRunway, altUnit);
     if (ils.canAcceptClearance) {
-      return `🎓 实时教练（${selectedAc.callsign} 已满足 ${selectedAc.assignedRunway} 切入条件）：按住 Shift 说“可以盲降”或点击右下角【CLEARED ILS ${selectedAc.assignedRunway}】建立盲降！`;
+      return `🎓 实时教练（${selectedAc.callsign} 已满足 ${selectedAc.assignedRunway} 切入条件）：按住通话键 说“可以盲降”或点击右下角【CLEARED ILS ${selectedAc.assignedRunway}】建立盲降！`;
     }
-    return `🎓 实时教练（${selectedAc.callsign} 进港引导）：按住 Shift 说“引导五边”或点击右下角【🎯 引导五边】即可自动对正 ${selectedAc.assignedRunway} 建立盲降！`;
+    return `🎓 实时教练（${selectedAc.callsign} 进港引导）：按住通话键 说“引导五边”或点击右下角【🎯 引导五边】即可自动对正 ${selectedAc.assignedRunway} 建立盲降！`;
   };
 
   // 海湾国际机场 (ZSHB) 8 步新手教学面板内容
@@ -410,7 +410,7 @@ export const RadarScopeCanvas: React.FC = () => {
     if (step === 5) {
       return {
         title: '🛫 实操带飞 (5/8) · 第一步：放行地面离港航班 CHH7601 起飞',
-        body: '现在雷达已开始运转！我已经为您选中了正在 09R 跑道外等待起飞的【海南航空 CHH7601 (A333 重型机)】。请看右下角指令台顶部，点击亮黄色的【CLEARED TAKEOFF 09R】按钮（或按住 Shift 说“起飞”），准许其进入 09R 跑道起飞滑跑！',
+        body: '现在雷达已开始运转！我已经为您选中了正在 09R 跑道外等待起飞的【海南航空 CHH7601 (A333 重型机)】。请看右下角指令台顶部，点击亮黄色的【CLEARED TAKEOFF 09R】按钮（或按住通话键 说“起飞”），准许其进入 09R 跑道起飞滑跑！',
         actionHint: '👉 操作任务：选中 CHH7601，点击右下角【CLEARED TAKEOFF 09R】按钮（或按回车键 Enter）。',
         isInteractiveStep: true,
       };
@@ -717,14 +717,14 @@ export const RadarScopeCanvas: React.FC = () => {
         )}
       </div>
 
-      {/* V8.0 按住 Shift 话筒语音对讲实时浮窗 */}
+      {/* V8.0 按住通话键 话筒语音对讲实时浮窗 */}
       {store.voicePtt.isListening && (
         <div
           className="voice-ptt-banner listening"
           data-testid="voice-ptt-listening-banner"
         >
           <div style={{ fontWeight: 800, color: '#fecaca', marginBottom: '2px' }}>
-            🎙️ VHF PTT 话筒发射中 (按住 Shift 说话，松开自动识别执行 · 仅播报机长复诵)
+            🎙️ VHF PTT 话筒发射中 (按住通话键 说话，松开自动识别执行 · 仅播报机长复诵)
           </div>
           <div className="mono" style={{ color: '#ffffff' }}>
             {store.voicePtt.interimTranscript || '正在聆听管制指令...'}

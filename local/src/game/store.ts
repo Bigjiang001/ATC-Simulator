@@ -1,3 +1,4 @@
+import { savePttKey } from '../atc/pttKey';
 import { MISSIONS, MissionProgress, loadMissionProgress, saveMissionProgress, isMissionUnlocked, createMissionState, missionStars } from './missions';
 import { UiLanguage, loadUiLanguage, saveUiLanguage } from '../i18n/language';
 import { useEffect, useState } from 'react';
@@ -500,6 +501,7 @@ class StoreContainer {
       updateSettings: (partial: Partial<GameSettings>, restartShift: boolean = false) => {
         const cur = this.state;
         const safePartial = { ...partial };
+        if (safePartial.pttKey) savePttKey(safePartial.pttKey);
         if (
           !cur.showPreGameLobby &&
           cur.status === 'RUNNING' &&

@@ -204,6 +204,7 @@ export interface GameSettings {
   pilotTtsEnabled: boolean;           // 是否开启【飞行员 PILOT】语音播报（关闭后仅文字显示在底部通话记录）
   voiceAssistEnabled?: boolean;       // Allow contextual callsign/Chinese command assistance
   requireLandingClearance?: boolean;  // Separate approach and landing clearance in procedure training
+  pttKey: string;
   enableVoiceControl: boolean;        // 是否开启【按住 Shift 麦克风语音指挥飞机模式】（开启后按住Shift说话识别，仅播报机长复诵）
   ttsLanguage: TtsLanguage;           // 'CN' (中文播报/识别) | 'EN' (英文播报/识别)
   vhfStaticLevel: VhfStaticLevel;     // 甚高频对讲机滋滋声与静噪尾音强度 ('OFF' | 'LOW' | 'MEDIUM' | 'HIGH')

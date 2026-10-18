@@ -1,3 +1,4 @@
+import { loadPttKey } from '../atc/pttKey';
 import { normalizePilotMessages, formatPilotReadback } from '../atc/radiotelephony';
 import {
   Aircraft,
@@ -145,6 +146,7 @@ export const DEFAULT_GAME_SETTINGS: GameSettings = {
   pilotTtsEnabled: true,
   // 默认开启按住 Shift 键麦克风语音指挥飞机模式
   enableVoiceControl: true,
+  pttKey: loadPttKey(),
   voiceAssistEnabled: true,
   requireLandingClearance: false,
   ttsLanguage: 'CN',

@@ -19,6 +19,7 @@ const DIST_HTML_PATH = path.resolve(ROOT_DIR, 'dist/index.html');
 const DIST_SIM_HTML_PATH = path.resolve(ROOT_DIR, 'dist/atc_command_simulator.html');
 
 const MODULE_FILES = [
+  { id: 'atc/pttKey', file: 'src/atc/pttKey.ts' },
   { id: 'atc/voiceGuidance', file: 'src/atc/voiceGuidance.ts' },
   { id: 'components/VoiceAssistPanel', file: 'src/components/VoiceAssistPanel.tsx' },
   { id: 'components/MissionPanel', file: 'src/components/MissionPanel.tsx' },

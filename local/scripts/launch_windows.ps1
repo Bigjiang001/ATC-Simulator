@@ -1,6 +1,7 @@
 param(
     [switch]$BootstrapOnly,
     [switch]$ForceProjectPython,
+    [switch]$NoBrowser,
     [switch]$FunctionsOnly
 )
 # Windows PowerShell 5.1 compatible. Keep ASCII, without a BOM.
@@ -190,7 +191,7 @@ function Invoke-Python {
     $savedPreference = $ErrorActionPreference
     try {
         $ErrorActionPreference = 'Continue'
-        & $script:Python @Arguments | Out-Host
+        & $script:Python @Arguments 2>&1 | ForEach-Object { $_.ToString() } | Out-Host
         $code = $LASTEXITCODE
     } finally {
         $ErrorActionPreference = $savedPreference
@@ -204,6 +205,9 @@ function Invoke-Python {
 if ($FunctionsOnly) { return }
 $stage = 'PRECHECK'
 try {
+    if (-not [Environment]::Is64BitOperatingSystem -or [Environment]::OSVersion.Version.Major -lt 10) {
+        throw 'Windows 10 or Windows 11 (64-bit) is required by the speech dependencies.'
+    }
     $projectDir = Split-Path $PSScriptRoot -Parent
     Set-Location -LiteralPath $projectDir
     $logDir = Join-Path $projectDir '.atc_windows_logs'
@@ -211,13 +215,13 @@ try {
     $logPath = Join-Path $logDir ('launcher-' + (Get-Date -Format 'yyyyMMdd-HHmmss') + '-' + $PID + '.log')
     Start-Transcript -Path $logPath | Out-Null
     $transcriptStarted = $true
-    foreach ($required in @('requirements.txt', 'atc_ai_server.py', 'atc_command_simulator.html', 'scripts\setup_qwen.py', 'scripts\launch_atc.py')) {
+    foreach ($required in @('requirements.txt', 'atc_ai_server.py', 'atc_command_simulator.html', 'scripts\setup_qwen.py', 'scripts\ensure_cuda.py', 'scripts\launch_atc.py')) {
         if (-not (Test-Path -LiteralPath (Join-Path $projectDir $required) -PathType Leaf)) {
             throw "Missing $required. Extract the whole project ZIP before double-clicking this launcher."
         }
     }
     Write-Host '===================================================================='
-    Write-Host ' ATC2.0 - Windows 11 automatic setup and launcher'
+    Write-Host ' ATC2.0 - Windows 10/11 automatic setup and launcher'
     Write-Host ' SenseVoice Small + Qwen3-TTS-0.6B (9 voices, adjustable rate) / Kokoro English (local)'
     Write-Host '===================================================================='
     Write-Host "[INFO] Project: $projectDir"
@@ -275,6 +279,8 @@ try {
         }
     }
     Invoke-Python -Arguments @('-I', '-m', 'pip', '--isolated', 'check') | Out-Null
+    Write-Host '[INFO] Checking NVIDIA GPU acceleration (ASR) ...'
+    Invoke-Python -Arguments @('-u', (Join-Path $projectDir 'scripts\ensure_cuda.py')) | Out-Null
     Invoke-Python -Arguments @('-I', '-c', 'import fastapi, uvicorn, multipart, numpy, soundfile, onnxruntime, kokoro_onnx, torch, torchaudio, funasr, modelscope, huggingface_hub; print(''AI dependency imports OK'')') | Out-Null
 
     $stage = 'MODELS'
@@ -283,19 +289,27 @@ try {
     # The backend catches download errors, so also check that model files exist.
     Invoke-Python -Arguments @('-c', 'from atc_ai_server import engine, KOKORO_DIR; sv = engine._find_local_sensevoice_dir(); assert sv is not None and (sv / ''model.pt'').is_file(), ''SenseVoice model download incomplete; check network and retry''; assert all((KOKORO_DIR / n).is_file() and (KOKORO_DIR / n).stat().st_size > 0 for n in (''kokoro-v1.0.onnx'', ''voices-v1.0.bin'')), ''Kokoro model download incomplete; check network and retry''; print(''Local model files OK'')') | Out-Null
 
+    Write-Host '[INFO] Checking Chinese TTS runtime and GPU acceleration ...'
     Invoke-Python -Arguments @('-u', (Join-Path $projectDir 'scripts\setup_qwen.py')) | Out-Null
 
     $stage = 'SERVER'
     Write-Host '[4/4] Loading models and starting http://127.0.0.1:18765/ ...'
     Write-Host '[INFO] The server opens your default browser after loading the models.'
+    Write-Host '[INFO] Change the push-to-talk key in System Settings > Push-to-talk key.'
     Write-Host '[INFO] Keep this window open while playing. Press Ctrl+C to stop.'
     # Both platforms wait for the current page AND all local speech models.
-    Invoke-Python -Arguments @('-u', (Join-Path $projectDir 'scripts\launch_atc.py')) | Out-Null
+    $launchArguments = @('-u', (Join-Path $projectDir 'scripts\launch_atc.py'))
+    if ($NoBrowser) { $launchArguments += '--no-browser' }
+    Invoke-Python -Arguments $launchArguments | Out-Null
 } catch {
     Write-Host ''
     Write-Host ('[ERROR][' + $stage + '] ' + $_.Exception.Message) -ForegroundColor Red
     if ($_.InvocationInfo.PositionMessage) { Write-Host $_.InvocationInfo.PositionMessage }
-    Write-Host '[HELP] Extract the complete repository ZIP first; run the launcher inside local/.'
+    if ($stage -eq 'SERVER') {
+        Write-Host '[HELP] See the specific server error above. Close any older ATC launcher window and retry.'
+    } else {
+        Write-Host '[HELP] Check the specific setup error above; run the launcher inside the complete local/ folder.'
+    }
     if ($logPath) { Write-Host "[INFO] See the full launcher log: $logPath" }
     exit 1
 } finally {

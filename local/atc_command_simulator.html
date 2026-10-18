@@ -1936,6 +1936,38 @@ html[lang="en"] .cmd-block-label {
   };
 
 
+  modules["atc/pttKey"] = function(module, exports, require) {
+    const React = window.__MINI_REACT__;
+    "use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.loadPttKey = loadPttKey;
+exports.matchesPttKey = matchesPttKey;
+exports.pttKeyLabel = pttKeyLabel;
+exports.savePttKey = savePttKey;
+const STORAGE_KEY = 'atc-ptt-key';
+function loadPttKey() {
+  try {
+    return window.localStorage.getItem(STORAGE_KEY) || 'Shift';
+  } catch {
+    return 'Shift';
+  }
+}
+function savePttKey(code) {
+  try {
+    window.localStorage.setItem(STORAGE_KEY, code);
+  } catch {/* Storage can be disabled. */}
+}
+function matchesPttKey(e, code) {
+  return code === 'Shift' ? e.code === 'ShiftLeft' || e.code === 'ShiftRight' || e.key === 'Shift' : e.code === code;
+}
+function pttKeyLabel(code) {
+  return code.replace(/^Key/, '').replace(/^Digit/, '').replace(/^Numpad/, '小键盘 ').replace('Space', '空格');
+}
+  };
+
   modules["atc/voiceGuidance"] = function(module, exports, require) {
     const React = window.__MINI_REACT__;
     "use strict";
@@ -2095,7 +2127,7 @@ const MissionStatus = () => {
   return (0, _react2.localizeUi)(/*#__PURE__*/_react.default.createElement("div", {
     className: "mission-status",
     "data-testid": "mission-status"
-  }, /*#__PURE__*/_react.default.createElement("div", null, /*#__PURE__*/_react.default.createElement("strong", null, store.uiLanguage === 'EN' ? mission.titleEn : mission.titleCn), /*#__PURE__*/_react.default.createElement("span", null, "\u7740\u9646 ", store.landedCount, "/", mission.arrivals, " \xB7 \u79FB\u4EA4 ", store.departedCount, "/", mission.departures)), /*#__PURE__*/_react.default.createElement("small", null, "\u5148\u9009\u822A\u73ED\uFF0C\u518D\u6309\u4F4F Shift \u8BF4\u8BDD\uFF1B\u4E5F\u53EF\u70B9\u51FB\u53F3\u4FA7\u5EFA\u8BAE\u53E3\u4EE4\u3002"), /*#__PURE__*/_react.default.createElement("small", null, "\u4E09\u661F\u76EE\u6807\uFF1A\u65E0\u51B2\u7A81\u3001\u65E0\u8D8A\u754C\uFF0C", Math.floor(mission.parTimeSec / 60), " \u5206\u949F\u5185\u5B8C\u6210\uFF1B\u53EF\u7528 2\xD7/4\xD7 \u500D\u901F\u3002"), /*#__PURE__*/_react.default.createElement("button", {
+  }, /*#__PURE__*/_react.default.createElement("div", null, /*#__PURE__*/_react.default.createElement("strong", null, store.uiLanguage === 'EN' ? mission.titleEn : mission.titleCn), /*#__PURE__*/_react.default.createElement("span", null, "\u7740\u9646 ", store.landedCount, "/", mission.arrivals, " \xB7 \u79FB\u4EA4 ", store.departedCount, "/", mission.departures)), /*#__PURE__*/_react.default.createElement("small", null, "\u5148\u9009\u822A\u73ED\uFF0C\u518D\u6309\u4F4F\u901A\u8BDD\u952E \u8BF4\u8BDD\uFF1B\u4E5F\u53EF\u70B9\u51FB\u53F3\u4FA7\u5EFA\u8BAE\u53E3\u4EE4\u3002"), /*#__PURE__*/_react.default.createElement("small", null, "\u4E09\u661F\u76EE\u6807\uFF1A\u65E0\u51B2\u7A81\u3001\u65E0\u8D8A\u754C\uFF0C", Math.floor(mission.parTimeSec / 60), " \u5206\u949F\u5185\u5B8C\u6210\uFF1B\u53EF\u7528 2\xD7/4\xD7 \u500D\u901F\u3002"), /*#__PURE__*/_react.default.createElement("button", {
     type: "button",
     className: "overlay-btn",
     onClick: () => store.restartGame(),
@@ -2365,6 +2397,26 @@ Object.defineProperty(exports, "__esModule", {
 exports.EN_UI = void 0;
 // Display translations only. Simulation data, radio logs and speech input stay in their original language.
 const EN_UI = exports.EN_UI = {
+  "通话键立即执行": "release the PTT key to execute",
+  "通话键不放": "hold the PTT key",
+  "请再次按住通话键说话即可识别": "hold the PTT key again to speak",
+  "请按住通话键不放": "please keep holding the PTT key",
+  "按住通话键或按住此处话筒语音指挥": "hold the PTT key or this microphone to speak",
+  "按住通话键可通过话筒语音下达指令": "hold the PTT key to issue a voice instruction",
+  "正在收音，请说出指令，松开 通话键发送…": "Listening; speak your instruction and release PTT key to send\u2026",
+  "按住通话键 或话筒说话，松开发送指令": "Hold PTT key or the microphone to speak; release to send",
+  "小键盘": "Numpad",
+  "空格": "Space",
+  "通话按键": "Push-to-talk key",
+  "点击下方输入框": "Click the field below",
+  "再按想绑定的键": "then press the desired key",
+  "字母": "letters",
+  "数字": "digits",
+  "功能键等": "function keys, etc.",
+  "恢复": "Reset",
+  "与游戏快捷键冲突时优先通话": "Push-to-talk takes priority over game shortcuts",
+  "系统保留按键可能无法被浏览器接收": "System-reserved keys may not reach the browser",
+  "通话键": "push-to-talk key",
   "请说出指令": "speak your instruction",
   "正在识别指令": "Recognizing instruction",
   "请稍候": "please wait",
@@ -10223,6 +10275,7 @@ exports.formatUtcClock = formatUtcClock;
 exports.issueSimulationCommand = issueSimulationCommand;
 exports.spawnEmergencyFlightInState = spawnEmergencyFlightInState;
 exports.switchAirportRunwayDirection = switchAirportRunwayDirection;
+var _pttKey = require("atc/pttKey");
 var _radiotelephony = require("atc/radiotelephony");
 var _harborAirport = require("airport/harborAirport");
 var _physics = require("aircraft/physics");
@@ -10261,6 +10314,7 @@ const DEFAULT_GAME_SETTINGS = exports.DEFAULT_GAME_SETTINGS = {
   pilotTtsEnabled: true,
   // 默认开启按住 Shift 键麦克风语音指挥飞机模式
   enableVoiceControl: true,
+  pttKey: (0, _pttKey.loadPttKey)(),
   voiceAssistEnabled: true,
   requireLandingClearance: false,
   ttsLanguage: 'CN',
@@ -11539,7 +11593,7 @@ class AtcSoundEngine {
   }
 
   /**
-   * 【阶段 1：按住 Shift 开启短句麦克风收音】
+   * 【阶段 1：按住通话键 开启短句麦克风收音】
    * 修复重点：
    * 1. 使用 pttSessionId 防止首次 getUserMedia 弹窗授权期间松开 Shift 导致状态卡死；
    * 2. 显式 await ctx.resume() 并挂载零增益节点，确保 ScriptProcessorNode 100% 持续触发采样；
@@ -11576,7 +11630,7 @@ class AtcSoundEngine {
       if (this.pttSessionId !== sessionId || !this.isRecordingPtt) {
         return {
           ok: false,
-          errorMsg: '麦克风已授权完成，请再次按住 Shift 键说话即可识别！'
+          errorMsg: '麦克风已授权完成，请再次按住通话键说话即可识别！'
         };
       }
       const ctx = this.ensureContext(true);
@@ -11719,7 +11773,7 @@ class AtcSoundEngine {
         itnTranscript: '',
         verifiedTranscript: '',
         latencyMs: 0,
-        errorDetail: '按键时间过短（请按住 Shift 键不放、说完指令后再松开）'
+        errorDetail: '按键时间过短（请按住通话键不放、说完指令后再松开）'
       };
     }
     if (peakAmp < 0.002) {
@@ -12980,6 +13034,7 @@ Object.defineProperty(exports, "formatAltitudeSpeechCn", {
   }
 });
 exports.useGameStore = useGameStore;
+var _pttKey = require("atc/pttKey");
 var _missions = require("game/missions");
 var _language = require("i18n/language");
 var _react = require("react");
@@ -13357,6 +13412,7 @@ class StoreContainer {
         const safePartial = {
           ...partial
         };
+        if (safePartial.pttKey) (0, _pttKey.savePttKey)(safePartial.pttKey);
         if (!cur.showPreGameLobby && cur.status === 'RUNNING' && safePartial.airportId && safePartial.airportId !== cur.settings.airportId && !restartShift) {
           delete safePartial.airportId;
         }
@@ -14463,17 +14519,17 @@ const RadarScopeCanvas = () => {
   const weatherIntruders = store.settings.enableWeatherCb ? store.aircraft.filter(a => a.inWeatherHazard && a.phase !== 'LANDED' && a.phase !== 'HANDED_OFF' && a.phase !== 'EXITED_AIRSPACE') : [];
   const getRookieCoachTip = () => {
     if (!selectedAc) {
-      return '🎓 实时教练：点击右侧进程单或雷达上的飞机即可选中；按住 Shift 键可通过话筒语音下达指令。';
+      return '🎓 实时教练：点击右侧进程单或雷达上的飞机即可选中；按住通话键可通过话筒语音下达指令。';
     }
     if (selectedAc.inRestrictedZone) {
       return `🚨 紧急提示（${selectedAc.callsign} 闯入限制区）：请立即拖拽航向偏离红色禁航区，或点击高度层爬升至限高以上！`;
     }
     if (selectedAc.phase === 'HOLDING_GROUND' || selectedAc.phase === 'LINE_UP_WAIT') {
-      return `🎓 实时教练（${selectedAc.callsign} 地面等待）：可按住 Shift 说“可以起飞”，或直接点击【CLEARED TAKEOFF ${selectedAc.assignedRunway}】放行起飞。`;
+      return `🎓 实时教练（${selectedAc.callsign} 地面等待）：可按住通话键 说“可以起飞”，或直接点击【CLEARED TAKEOFF ${selectedAc.assignedRunway}】放行起飞。`;
     }
     if (selectedAc.category === 'DEPARTURE') {
       if (selectedAc.canHandoff) {
-        return `🎓 实时教练（${selectedAc.callsign} 达到移交条件）：按住 Shift 说“移交”或点击右下角【★ HANDOFF 移交】完成离场移交！`;
+        return `🎓 实时教练（${selectedAc.callsign} 达到移交条件）：按住通话键 说“移交”或点击右下角【★ HANDOFF 移交】完成离场移交！`;
       }
       return `🎓 实时教练（${selectedAc.callsign} 离场爬升中）：过 360m 后将自动切入 ${selectedAc.assignedExitId || 'SID'} 离场航线并爬升至 ${(0, _physics.formatAltitudeValue)(6000, altUnit)} 移交层。`;
     }
@@ -14485,9 +14541,9 @@ const RadarScopeCanvas = () => {
     }
     const ils = (0, _physics.checkIlsConditions)(selectedAc, store.airport, selectedAc.assignedRunway, altUnit);
     if (ils.canAcceptClearance) {
-      return `🎓 实时教练（${selectedAc.callsign} 已满足 ${selectedAc.assignedRunway} 切入条件）：按住 Shift 说“可以盲降”或点击右下角【CLEARED ILS ${selectedAc.assignedRunway}】建立盲降！`;
+      return `🎓 实时教练（${selectedAc.callsign} 已满足 ${selectedAc.assignedRunway} 切入条件）：按住通话键 说“可以盲降”或点击右下角【CLEARED ILS ${selectedAc.assignedRunway}】建立盲降！`;
     }
-    return `🎓 实时教练（${selectedAc.callsign} 进港引导）：按住 Shift 说“引导五边”或点击右下角【🎯 引导五边】即可自动对正 ${selectedAc.assignedRunway} 建立盲降！`;
+    return `🎓 实时教练（${selectedAc.callsign} 进港引导）：按住通话键 说“引导五边”或点击右下角【🎯 引导五边】即可自动对正 ${selectedAc.assignedRunway} 建立盲降！`;
   };
 
   // 海湾国际机场 (ZSHB) 8 步新手教学面板内容
@@ -14528,7 +14584,7 @@ const RadarScopeCanvas = () => {
     if (step === 5) {
       return {
         title: '🛫 实操带飞 (5/8) · 第一步：放行地面离港航班 CHH7601 起飞',
-        body: '现在雷达已开始运转！我已经为您选中了正在 09R 跑道外等待起飞的【海南航空 CHH7601 (A333 重型机)】。请看右下角指令台顶部，点击亮黄色的【CLEARED TAKEOFF 09R】按钮（或按住 Shift 说“起飞”），准许其进入 09R 跑道起飞滑跑！',
+        body: '现在雷达已开始运转！我已经为您选中了正在 09R 跑道外等待起飞的【海南航空 CHH7601 (A333 重型机)】。请看右下角指令台顶部，点击亮黄色的【CLEARED TAKEOFF 09R】按钮（或按住通话键 说“起飞”），准许其进入 09R 跑道起飞滑跑！',
         actionHint: '👉 操作任务：选中 CHH7601，点击右下角【CLEARED TAKEOFF 09R】按钮（或按回车键 Enter）。',
         isInteractiveStep: true
       };
@@ -14758,7 +14814,7 @@ const RadarScopeCanvas = () => {
       color: '#fecaca',
       marginBottom: '2px'
     }
-  }, "\uD83C\uDF99\uFE0F VHF PTT \u8BDD\u7B52\u53D1\u5C04\u4E2D (\u6309\u4F4F Shift \u8BF4\u8BDD\uFF0C\u677E\u5F00\u81EA\u52A8\u8BC6\u522B\u6267\u884C \xB7 \u4EC5\u64AD\u62A5\u673A\u957F\u590D\u8BF5)"), /*#__PURE__*/_react2.default.createElement("div", {
+  }, "\uD83C\uDF99\uFE0F VHF PTT \u8BDD\u7B52\u53D1\u5C04\u4E2D (\u6309\u4F4F\u901A\u8BDD\u952E \u8BF4\u8BDD\uFF0C\u677E\u5F00\u81EA\u52A8\u8BC6\u522B\u6267\u884C \xB7 \u4EC5\u64AD\u62A5\u673A\u957F\u590D\u8BF5)"), /*#__PURE__*/_react2.default.createElement("div", {
     className: "mono",
     style: {
       color: '#ffffff'
@@ -15404,8 +15460,8 @@ const CommandPanel = () => {
     onMouseDown: handlePttMouseDown,
     onMouseUp: handlePttMouseUp,
     onMouseLeave: handlePttMouseUp,
-    title: "\u6309\u4F4F Shift \u6216\u8BDD\u7B52\u8BF4\u8BDD\uFF0C\u677E\u5F00\u53D1\u9001\u6307\u4EE4"
-  }, store.voicePtt.isListening ? '🎙️ 正在收音，松开发送…' : '🎙️ 按住 Shift 键或按住此处话筒语音指挥')), /*#__PURE__*/_react2.default.createElement("div", {
+    title: "\u6309\u4F4F\u901A\u8BDD\u952E \u6216\u8BDD\u7B52\u8BF4\u8BDD\uFF0C\u677E\u5F00\u53D1\u9001\u6307\u4EE4"
+  }, store.voicePtt.isListening ? '🎙️ 正在收音，松开发送…' : '🎙️ 按住通话键或按住此处话筒语音指挥')), /*#__PURE__*/_react2.default.createElement("div", {
     className: "btn-grid-row",
     style: {
       marginTop: '4px',
@@ -15588,6 +15644,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.GameModals = void 0;
+var _pttKey = require("atc/pttKey");
 var _react = require("i18n/react");
 var _react2 = _interopRequireWildcard(require("react"));
 var _store = require("game/store");
@@ -15886,7 +15943,7 @@ const GameModals = () => {
     }
   }, /*#__PURE__*/_react2.default.createElement("span", {
     className: "setting-label"
-  }, "3. \u5929\u6C14\u3001\u9650\u5236\u533A\u4E0E Shift \u8BED\u97F3\u6307\u6325\u5F00\u5173\uFF1A"), /*#__PURE__*/_react2.default.createElement("button", {
+  }, "3. \u5929\u6C14\u3001\u9650\u5236\u533A\u4E0E \u901A\u8BDD\u952E\u8BED\u97F3\u6307\u6325\u5F00\u5173\uFF1A"), /*#__PURE__*/_react2.default.createElement("button", {
     type: "button",
     className: "btn-voice-preview",
     "data-testid": "lobby-btn-cavok-clear",
@@ -15922,7 +15979,7 @@ const GameModals = () => {
     className: `btn-cmd ${lobbyVoiceControl ? 'active' : ''}`,
     "data-testid": "lobby-toggle-voice-control",
     onClick: () => setLobbyVoiceControl(!lobbyVoiceControl)
-  }, lobbyVoiceControl ? '🎙️ Shift语音指挥：开' : '🎙️ Shift语音指挥：关')))), /*#__PURE__*/_react2.default.createElement("div", {
+  }, lobbyVoiceControl ? '🎙️ 通话键语音指挥：开' : '🎙️ 通话键语音指挥：关')))), /*#__PURE__*/_react2.default.createElement("div", {
     className: "settings-card"
   }, /*#__PURE__*/_react2.default.createElement("h3", null, "\u7B2C\u4E09\u6B65\uFF1A\u9009\u62E9\u6267\u52E4\u673A\u573A\u5730\u56FE"), /*#__PURE__*/_react2.default.createElement("div", {
     className: "airport-cards-grid"
@@ -16006,7 +16063,7 @@ const GameModals = () => {
     className: "modal-kicker"
   }, "ATC2.0 \xB7 IN-SHIFT SYSTEM CONFIGURATION"), /*#__PURE__*/_react2.default.createElement("h2", {
     className: "modal-heading"
-  }, "\u2699 \u7CFB\u7EDF\u8BBE\u7F6E\uFF08Shift \u8BED\u97F3\u6307\u6325 / \u7BA1\u5236\u4E0E\u673A\u957F\u72EC\u7ACB\u8BED\u97F3\u5F00\u5173 / \u97F3\u8272\u4E0E\u8BED\u901F / \u6C14\u8C61\u4E0E\u9650\u5236\u533A\uFF09")), /*#__PURE__*/_react2.default.createElement("div", {
+  }, "\u2699 \u7CFB\u7EDF\u8BBE\u7F6E\uFF08\u901A\u8BDD\u952E\u8BED\u97F3\u6307\u6325 / \u7BA1\u5236\u4E0E\u673A\u957F\u72EC\u7ACB\u8BED\u97F3\u5F00\u5173 / \u97F3\u8272\u4E0E\u8BED\u901F / \u6C14\u8C61\u4E0E\u9650\u5236\u533A\uFF09")), /*#__PURE__*/_react2.default.createElement("div", {
     className: "settings-scroll-body"
   }, languagePicker('settings'), /*#__PURE__*/_react2.default.createElement("div", {
     className: "settings-card"
@@ -16053,13 +16110,37 @@ const GameModals = () => {
       color: '#cbd5e1',
       fontSize: '10px'
     }
-  }, "\u94FE\u8DEF\uFF1A[\u73A9\u5BB6\u6309 Shift \u8BF4\u51FA\u6307\u4EE4] \u2794 [SenseVoice Small \u8F6C\u6587\u5B57 + \u822A\u73ED/\u5BFC\u822A\u53F0/\u8DD1\u9053\u6821\u9A8C] \u2794 [\u822A\u7A7A\u901A\u8BDD\u89C4\u8303\u5316\u5F15\u64CE] \u2794 [\u751F\u6210\u6807\u51C6\u98DE\u884C\u5458\u590D\u8BF5] \u2794 [Qwen / Kokoro TTS \u822A\u7A7A\u97F3\u6807\u5408\u6210 + \u7535\u53F0\u97F3\u6548]")), /*#__PURE__*/_react2.default.createElement("div", {
+  }, "\u94FE\u8DEF\uFF1A[\u73A9\u5BB6\u6309\u901A\u8BDD\u952E \u8BF4\u51FA\u6307\u4EE4] \u2794 [SenseVoice Small \u8F6C\u6587\u5B57 + \u822A\u73ED/\u5BFC\u822A\u53F0/\u8DD1\u9053\u6821\u9A8C] \u2794 [\u822A\u7A7A\u901A\u8BDD\u89C4\u8303\u5316\u5F15\u64CE] \u2794 [\u751F\u6210\u6807\u51C6\u98DE\u884C\u5458\u590D\u8BF5] \u2794 [Qwen / Kokoro TTS \u822A\u7A7A\u97F3\u6807\u5408\u6210 + \u7535\u53F0\u97F3\u6548]")), /*#__PURE__*/_react2.default.createElement("label", {
+    className: "setting-row-block"
+  }, /*#__PURE__*/_react2.default.createElement("span", {
+    className: "setting-label"
+  }, "\u901A\u8BDD\u6309\u952E\uFF1A\u70B9\u51FB\u4E0B\u65B9\u8F93\u5165\u6846\uFF0C\u518D\u6309\u60F3\u7ED1\u5B9A\u7684\u952E\uFF08\u5B57\u6BCD\u3001\u6570\u5B57\u3001\u7A7A\u683C\u3001\u529F\u80FD\u952E\u7B49\uFF09"), /*#__PURE__*/_react2.default.createElement("input", {
+    "data-testid": "ptt-key-binding",
+    "aria-label": "\u901A\u8BDD\u6309\u952E",
+    readOnly: true,
+    value: (0, _pttKey.pttKeyLabel)(s.pttKey),
+    onKeyDown: event => {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!event.repeat && event.code && event.code !== 'Unidentified') {
+        store.updateSettings({
+          pttKey: event.code
+        });
+      }
+    }
+  }), /*#__PURE__*/_react2.default.createElement("button", {
+    type: "button",
+    className: "btn-cmd",
+    onClick: () => store.updateSettings({
+      pttKey: 'Shift'
+    })
+  }, "\u6062\u590D Shift"), /*#__PURE__*/_react2.default.createElement("small", null, "\u6309\u4F4F\u901A\u8BDD\u952E\u8BF4\u8BDD\uFF0C\u677E\u5F00\u53D1\u9001\uFF1B\u4E0E\u6E38\u620F\u5FEB\u6377\u952E\u51B2\u7A81\u65F6\u4F18\u5148\u901A\u8BDD\u3002\u7CFB\u7EDF\u4FDD\u7559\u6309\u952E\u53EF\u80FD\u65E0\u6CD5\u88AB\u6D4F\u89C8\u5668\u63A5\u6536\u3002")), /*#__PURE__*/_react2.default.createElement("div", {
     className: "setting-two-col"
   }, /*#__PURE__*/_react2.default.createElement("div", {
     className: "setting-row-block"
   }, /*#__PURE__*/_react2.default.createElement("span", {
     className: "setting-label"
-  }, "1. \uD83C\uDF99\uFE0F \u6309\u4F4F Shift \u952E\u9EA6\u514B\u98CE\u8BED\u97F3\u6307\u6325\u6A21\u5F0F\uFF08\u5F00\u542F\u540E\u6309\u4F4F Shift \u8BF4\u8BDD\u8BC6\u522B\uFF0C\u4EC5\u64AD\u62A5\u98DE\u884C\u5458\u590D\u8BF5\uFF09\uFF1A"), /*#__PURE__*/_react2.default.createElement("div", {
+  }, "1. \uD83C\uDF99\uFE0F \u6309\u4F4F\u901A\u8BDD\u952E \u952E\u9EA6\u514B\u98CE\u8BED\u97F3\u6307\u6325\u6A21\u5F0F\uFF08\u5F00\u542F\u540E\u6309\u4F4F\u901A\u8BDD\u952E \u8BF4\u8BDD\u8BC6\u522B\uFF0C\u4EC5\u64AD\u62A5\u98DE\u884C\u5458\u590D\u8BF5\uFF09\uFF1A"), /*#__PURE__*/_react2.default.createElement("div", {
     className: "btn-grid-row"
   }, /*#__PURE__*/_react2.default.createElement("button", {
     type: "button",
@@ -16068,7 +16149,7 @@ const GameModals = () => {
     onClick: () => store.updateSettings({
       enableVoiceControl: s.enableVoiceControl === false
     })
-  }, s.enableVoiceControl !== false ? '🎙️ 按住 Shift 语音指挥：已开启' : '🎙️ 按住 Shift 语音指挥：已关闭'), /*#__PURE__*/_react2.default.createElement("button", {
+  }, s.enableVoiceControl !== false ? '🎙️ 按住通话键 语音指挥：已开启' : '🎙️ 按住通话键 语音指挥：已关闭'), /*#__PURE__*/_react2.default.createElement("button", {
     type: "button",
     className: `btn-cmd ${!store.isMuted ? 'active' : ''}`,
     "data-testid": "toggle-audio-mute",
@@ -16319,7 +16400,7 @@ const GameModals = () => {
     "data-testid": "license-passed-title"
   }, "\uD83C\uDF96\uFE0F \u606D\u559C\uFF01\u7EC8\u7AEF\u533A\u96F7\u8FBE\u7BA1\u5236\u6A21\u62DF\u8003\u6838\u901A\u8FC7\uFF01")), /*#__PURE__*/_react2.default.createElement("p", {
     className: "modal-desc"
-  }, "\u60A8\u5DF2\u5728\u3010\u6D77\u6E7E\u56FD\u9645\u673A\u573A (ZSHB)\u3011\u5706\u6EE1\u5B8C\u6210\u65B0\u624B\u6559\u5B66\u5168\u90E8\u8BFE\u7A0B\u4E0E\u5B9E\u64CD\u5E26\u98DE\u8003\u6838\uFF0C\u719F\u7EC3\u638C\u63E1\u4E86\u96F7\u8FBE\u6807\u724C\u5224\u8BFB\u3001\u8FDB\u7A0B\u5355\u7BA1\u7406\u3001\u9F20\u6807\u62D6\u62FD\u822A\u5411\u5F15\u5BFC\u3001Shift \u8BED\u97F3\u6307\u6325\u4EE5\u53CA\u76F2\u964D/\u8D77\u98DE/\u79FB\u4EA4\u5168\u5957\u7BA1\u5236\u6D41\u7A0B\uFF01"), /*#__PURE__*/_react2.default.createElement("div", {
+  }, "\u60A8\u5DF2\u5728\u3010\u6D77\u6E7E\u56FD\u9645\u673A\u573A (ZSHB)\u3011\u5706\u6EE1\u5B8C\u6210\u65B0\u624B\u6559\u5B66\u5168\u90E8\u8BFE\u7A0B\u4E0E\u5B9E\u64CD\u5E26\u98DE\u8003\u6838\uFF0C\u719F\u7EC3\u638C\u63E1\u4E86\u96F7\u8FBE\u6807\u724C\u5224\u8BFB\u3001\u8FDB\u7A0B\u5355\u7BA1\u7406\u3001\u9F20\u6807\u62D6\u62FD\u822A\u5411\u5F15\u5BFC\u3001\u901A\u8BDD\u952E\u8BED\u97F3\u6307\u6325\u4EE5\u53CA\u76F2\u964D/\u8D77\u98DE/\u79FB\u4EA4\u5168\u5957\u7BA1\u5236\u6D41\u7A0B\uFF01"), /*#__PURE__*/_react2.default.createElement("div", {
     className: "score-summary-box"
   }, /*#__PURE__*/_react2.default.createElement("div", {
     className: "grade-badge"
@@ -16509,11 +16590,11 @@ const GameModals = () => {
     className: "modal-kicker"
   }, "ATC2.0 SOP \xB7 \u8BED\u97F3\u6307\u6325\u4E0E\u6C11\u822A\u7BA1\u5236\u89C4\u8303"), /*#__PURE__*/_react2.default.createElement("h2", {
     className: "modal-heading"
-  }, "\u7A7A\u4E2D\u4EA4\u901A\u7BA1\u5236\u64CD\u4F5C\u624B\u518C\u4E0E Shift \u8BED\u97F3\u6307\u6325\u6307\u5357")), /*#__PURE__*/_react2.default.createElement("div", {
+  }, "\u7A7A\u4E2D\u4EA4\u901A\u7BA1\u5236\u64CD\u4F5C\u624B\u518C\u4E0E \u901A\u8BDD\u952E\u8BED\u97F3\u6307\u6325\u6307\u5357")), /*#__PURE__*/_react2.default.createElement("div", {
     className: "help-grid"
   }, /*#__PURE__*/_react2.default.createElement("div", {
     className: "help-section"
-  }, /*#__PURE__*/_react2.default.createElement("h3", null, "1. \uD83C\uDF99\uFE0F \u6309\u4F4F Shift \u8BDD\u7B52\u6A21\u7CCA\u8BED\u97F3\u6307\u6325 (ATC2.0 \u6838\u5FC3)"), /*#__PURE__*/_react2.default.createElement("ul", null, /*#__PURE__*/_react2.default.createElement("li", null, /*#__PURE__*/_react2.default.createElement("strong", null, "\u4E00\u952E\u6309\u4F4F\u8BF4\u8BDD"), "\uFF1A\u6309\u4F4F\u952E\u76D8 ", /*#__PURE__*/_react2.default.createElement("code", null, "Shift"), " \u952E\uFF08\u6216\u6309\u4F4F\u53F3\u4FA7\u8BDD\u7B52\u6309\u94AE\uFF09\u5BF9\u7740\u9EA6\u514B\u98CE\u8BF4\u51FA\u6307\u4EE4\uFF0C\u677E\u5F00\u540E\u81EA\u52A8\u8BC6\u522B\u6267\u884C\uFF0C\u4E14\u8BED\u97F3\u91CC", /*#__PURE__*/_react2.default.createElement("strong", null, "\u53EA\u64AD\u653E\u98DE\u884C\u5458\u7684\u590D\u8BF5\u58F0\u97F3"), "\u3002"), /*#__PURE__*/_react2.default.createElement("li", null, /*#__PURE__*/_react2.default.createElement("strong", null, "\u652F\u6301\u6A21\u7CCA\u53E3\u8BED\u8BC6\u522B"), "\uFF1A\u65E0\u9700\u80CC\u8BF5\u6807\u51C6\u672F\u8BED\uFF0C\u76F4\u63A5\u8BF4 ", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u4E0B600\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u964D\u5230900\u7C73\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u53EF\u4EE5\u76F2\u964D\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u5F15\u5BFC\u4E94\u8FB9\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u5DE6\u8F6C090\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u51CF\u901F180\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u8D77\u98DE\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u79FB\u4EA4\u201D"), " \u6216 ", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u4E1C\u822A5213\u4E0B600\u76F2\u964D\u201D"), " \u5373\u53EF\u6267\u884C\uFF01"))), /*#__PURE__*/_react2.default.createElement("div", {
+  }, /*#__PURE__*/_react2.default.createElement("h3", null, "1. \uD83C\uDF99\uFE0F \u6309\u4F4F\u901A\u8BDD\u952E \u8BDD\u7B52\u6A21\u7CCA\u8BED\u97F3\u6307\u6325 (ATC2.0 \u6838\u5FC3)"), /*#__PURE__*/_react2.default.createElement("ul", null, /*#__PURE__*/_react2.default.createElement("li", null, /*#__PURE__*/_react2.default.createElement("strong", null, "\u4E00\u952E\u6309\u4F4F\u8BF4\u8BDD"), "\uFF1A\u6309\u4F4F\u952E\u76D8 ", /*#__PURE__*/_react2.default.createElement("code", null, (0, _pttKey.pttKeyLabel)(s.pttKey)), " \u952E\uFF08\u6216\u6309\u4F4F\u53F3\u4FA7\u8BDD\u7B52\u6309\u94AE\uFF09\u5BF9\u7740\u9EA6\u514B\u98CE\u8BF4\u51FA\u6307\u4EE4\uFF0C\u677E\u5F00\u540E\u81EA\u52A8\u8BC6\u522B\u6267\u884C\uFF0C\u4E14\u8BED\u97F3\u91CC", /*#__PURE__*/_react2.default.createElement("strong", null, "\u53EA\u64AD\u653E\u98DE\u884C\u5458\u7684\u590D\u8BF5\u58F0\u97F3"), "\u3002"), /*#__PURE__*/_react2.default.createElement("li", null, /*#__PURE__*/_react2.default.createElement("strong", null, "\u652F\u6301\u6A21\u7CCA\u53E3\u8BED\u8BC6\u522B"), "\uFF1A\u65E0\u9700\u80CC\u8BF5\u6807\u51C6\u672F\u8BED\uFF0C\u76F4\u63A5\u8BF4 ", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u4E0B600\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u964D\u5230900\u7C73\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u53EF\u4EE5\u76F2\u964D\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u5F15\u5BFC\u4E94\u8FB9\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u5DE6\u8F6C090\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u51CF\u901F180\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u8D77\u98DE\u201D"), "\u3001", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u79FB\u4EA4\u201D"), " \u6216 ", /*#__PURE__*/_react2.default.createElement("code", null, "\u201C\u4E1C\u822A5213\u4E0B600\u76F2\u964D\u201D"), " \u5373\u53EF\u6267\u884C\uFF01"))), /*#__PURE__*/_react2.default.createElement("div", {
     className: "help-section"
   }, /*#__PURE__*/_react2.default.createElement("h3", null, "2. \uD83C\uDFA7 \u7BA1\u5236\u5458\u4E0E\u98DE\u884C\u5458\u72EC\u7ACB\u8BED\u97F3\u5F00\u5173\u4E0E\u7CBE\u9009\u97F3\u8272"), /*#__PURE__*/_react2.default.createElement("ul", null, /*#__PURE__*/_react2.default.createElement("li", null, /*#__PURE__*/_react2.default.createElement("strong", null, "\u7CBE\u51C6\u63A7\u5236\u542C\u8C01\u7684\u58F0\u97F3"), "\uFF1A\u5728\u3010\u8BBE\u7F6E\u3011\u7684\u7BA1\u5236\u5458\u548C\u98DE\u884C\u5458\u533A\u57DF\u5404\u6709\u4E00\u4E2A\u72EC\u7ACB\u7684 ", /*#__PURE__*/_react2.default.createElement("code", null, "\uD83D\uDD0A \u5F00\u542F\u8BED\u97F3 / \uD83D\uDD07 \u4EC5\u6587\u5B57"), " \u5F00\u5173\uFF1B\u82E5\u53EA\u5F00\u7BA1\u5236\u5458\uFF0C\u5219\u98DE\u884C\u5458\u901A\u8BDD\u4EC5\u663E\u793A\u5728\u4E0B\u65B9\u8BB0\u5F55\u4E2D\u4E0D\u53D1\u58F0\uFF1B\u82E5\u53EA\u5F00\u98DE\u884C\u5458\uFF0C\u5219\u53EA\u542C\u673A\u957F\u590D\u8BF5\u3002"), /*#__PURE__*/_react2.default.createElement("li", null, /*#__PURE__*/_react2.default.createElement("strong", null, "\u7CBE\u9009\u9AD8\u97F3\u8D28\u58F0\u6E90"), "\uFF1A\u5DF2\u8FC7\u6EE4\u673A\u68B0\u97F3\u4E0E\u4F4E\u8D28\u91CF\u58F0\u6E90\uFF0CQwen \u4E5D\u79CD\u97F3\u8272\u5305\u542B\u666E\u901A\u8BDD\u3001\u5317\u4EAC\u8BDD\u3001\u56DB\u5DDD\u8BDD\u53CA\u5916\u8BED\u97F3\u8272\uFF1B\u82F1\u6587\u4E5F\u53EF\u9009 Kokoro\u3002\u5931\u8D25\u65F6\u4EC5\u4FDD\u7559\u6587\u5B57\uFF0C\u4E0D\u5207\u6362\u97F3\u8272\u3002"))), /*#__PURE__*/_react2.default.createElement("div", {
     className: "help-section"
@@ -16539,6 +16620,7 @@ Object.defineProperty(exports, "__esModule", {
   value: true
 });
 exports.default = exports.App = void 0;
+var _pttKey = require("atc/pttKey");
 var _language = require("i18n/language");
 var _react = _interopRequireWildcard(require("react"));
 var _store = require("game/store");
@@ -16594,14 +16676,14 @@ const App = () => {
       st.setVoicePttState({
         isListening: true,
         pipelineStage: 'SHIFT_RECORDING',
-        interimTranscript: '正在收音，请说出指令，松开 Shift 发送…',
+        interimTranscript: '正在收音，请说出指令，松开 通话键发送…',
         statusType: 'LISTENING'
       });
       void _soundEngine.soundEngine.startPttRecording(st.settings.ttsLanguage, (liveText, volPct) => {
         if (!shiftHeldRef.current) return;
         const volBar = volPct > 0 ? `[音量 ${volPct}%] ` : '';
         _store.useGameStore.getState().setVoicePttState({
-          interimTranscript: liveText ? `🎤 ${volBar}实时识别中: “${liveText}”` : `🎤 ${volBar}正在收音，请说话（说完后松开 Shift 键立即执行）...`
+          interimTranscript: liveText ? `🎤 ${volBar}实时识别中: “${liveText}”` : `🎤 ${volBar}正在收音，请说话（说完后松开 通话键立即执行）...`
         });
       }).then(res => {
         if (!res.ok && shiftHeldRef.current) {
@@ -16656,7 +16738,7 @@ const App = () => {
             isListening: false,
             pipelineStage: 'IDLE',
             interimTranscript: '',
-            lastSummaryCn: '未检测到清晰语音片段（请按住 Shift 键不放、说完指令后再松开）',
+            lastSummaryCn: '未检测到清晰语音片段（请按住 通话键不放、说完指令后再松开）',
             statusType: 'IDLE'
           });
         }
@@ -16699,13 +16781,14 @@ const App = () => {
     const onKeyDown = e => {
       const targetEl = e.target;
       const tag = targetEl?.tagName;
-      const isTextInput = tag === 'TEXTAREA' || tag === 'INPUT' && targetEl.type === 'text';
+      const isTextInput = tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || Boolean(targetEl?.isContentEditable);
 
       // 兼容 Windows 11 中文输入法状态下按 Shift 返回 e.key === 'Process' 但 e.code === 'ShiftLeft'/'ShiftRight' 的情况！
-      const isShiftKey = e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
+      const isShiftKey = (0, _pttKey.matchesPttKey)(e, _store.useGameStore.getState().settings.pttKey);
       const st = _store.useGameStore.getState();
-      if (isShiftKey && !isTextInput && !e.repeat && st.settings.enableVoiceControl && !st.showPreGameLobby) {
-        startPttListening();
+      if (isShiftKey && !isTextInput && st.settings.enableVoiceControl && !st.showPreGameLobby && !st.showSettingsModal) {
+        e.preventDefault();
+        if (!e.repeat) startPttListening();
         return;
       }
       if (isTextInput || tag === 'INPUT' || tag === 'SELECT') return;
@@ -16754,8 +16837,9 @@ const App = () => {
       }
     };
     const onKeyUp = e => {
-      const isShiftKey = e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
-      if (isShiftKey) {
+      const isShiftKey = (0, _pttKey.matchesPttKey)(e, _store.useGameStore.getState().settings.pttKey);
+      if (isShiftKey && shiftHeldRef.current) {
+        e.preventDefault();
         stopPttListening();
       }
     };

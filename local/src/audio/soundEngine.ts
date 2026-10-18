@@ -215,7 +215,7 @@ class AtcSoundEngine {
   }
 
   /**
-   * 【阶段 1：按住 Shift 开启短句麦克风收音】
+   * 【阶段 1：按住通话键 开启短句麦克风收音】
    * 修复重点：
    * 1. 使用 pttSessionId 防止首次 getUserMedia 弹窗授权期间松开 Shift 导致状态卡死；
    * 2. 显式 await ctx.resume() 并挂载零增益节点，确保 ScriptProcessorNode 100% 持续触发采样；
@@ -255,7 +255,7 @@ class AtcSoundEngine {
 
       // 如果在等待麦克风权限弹窗期间用户已经松开了 Shift，立即终止本次录音
       if (this.pttSessionId !== sessionId || !this.isRecordingPtt) {
-        return { ok: false, errorMsg: '麦克风已授权完成，请再次按住 Shift 键说话即可识别！' };
+        return { ok: false, errorMsg: '麦克风已授权完成，请再次按住通话键说话即可识别！' };
       }
 
       const ctx = this.ensureContext(true);
@@ -418,7 +418,7 @@ class AtcSoundEngine {
         itnTranscript: '',
         verifiedTranscript: '',
         latencyMs: 0,
-        errorDetail: '按键时间过短（请按住 Shift 键不放、说完指令后再松开）',
+        errorDetail: '按键时间过短（请按住通话键不放、说完指令后再松开）',
       };
     }
 

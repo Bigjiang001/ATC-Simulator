@@ -1,3 +1,4 @@
+import { pttKeyLabel } from '../atc/pttKey';
 import { localizeUi } from '../i18n/react';
 import React, { useEffect, useState } from 'react';
 import { useGameStore } from '../game/store';
@@ -276,7 +277,7 @@ export const GameModals: React.FC = () => {
                     }}
                   >
                     <span className="setting-label">
-                      3. 天气、限制区与 Shift 语音指挥开关：
+                      3. 天气、限制区与 通话键语音指挥开关：
                     </span>
                     <button
                       type="button"
@@ -329,7 +330,7 @@ export const GameModals: React.FC = () => {
                       data-testid="lobby-toggle-voice-control"
                       onClick={() => setLobbyVoiceControl(!lobbyVoiceControl)}
                     >
-                      {lobbyVoiceControl ? '🎙️ Shift语音指挥：开' : '🎙️ Shift语音指挥：关'}
+                      {lobbyVoiceControl ? '🎙️ 通话键语音指挥：开' : '🎙️ 通话键语音指挥：关'}
                     </button>
                   </div>
                 </div>
@@ -453,7 +454,7 @@ export const GameModals: React.FC = () => {
                 ATC2.0 · IN-SHIFT SYSTEM CONFIGURATION
               </div>
               <h2 className="modal-heading">
-                ⚙ 系统设置（Shift 语音指挥 / 管制与机长独立语音开关 / 音色与语速 / 气象与限制区）
+                ⚙ 系统设置（通话键语音指挥 / 管制与机长独立语音开关 / 音色与语速 / 气象与限制区）
               </h2>
             </div>
 
@@ -475,7 +476,7 @@ export const GameModals: React.FC = () => {
                 </button>
                 <small>根据已选航班、当前进离港状态纠正常见同音字和呼号；有歧义时先选航班再重说。不会跳过跑道与尾流安全检查。</small>
               </div>
-              {/* 区块 1：V8.0 按住 Shift 话筒语音指挥 & 管制员/飞行员独立语音播报开关与精选音色 */}
+              {/* 区块 1：V8.0 按住通话键 话筒语音指挥 & 管制员/飞行员独立语音播报开关与精选音色 */}
               <div className="settings-card">
                 <h3>
                   一、🎙️ SenseVoice Small 语音识别 + 航空通话规范化引擎 + Qwen / Kokoro TTS 播报系统
@@ -498,14 +499,27 @@ export const GameModals: React.FC = () => {
                   <div>Qwen3-TTS: {aiStatus.qwenLoaded ? '✓' : '—'} · Kokoro: {aiStatus.kokoroLoaded ? '✓' : '—'}</div>
                   {aiStatus.lastTtsError && <div role="status" style={{ color: '#ffba69' }}>{aiStatus.lastTtsError}</div>}
                   <div style={{ color: '#cbd5e1', fontSize: '10px' }}>
-                    链路：[玩家按 Shift 说出指令] ➔ [SenseVoice Small 转文字 + 航班/导航台/跑道校验] ➔ [航空通话规范化引擎] ➔ [生成标准飞行员复诵] ➔ [Qwen / Kokoro TTS 航空音标合成 + 电台音效]
+                    链路：[玩家按通话键 说出指令] ➔ [SenseVoice Small 转文字 + 航班/导航台/跑道校验] ➔ [航空通话规范化引擎] ➔ [生成标准飞行员复诵] ➔ [Qwen / Kokoro TTS 航空音标合成 + 电台音效]
                   </div>
                 </div>
 
+                <label className="setting-row-block">
+                  <span className="setting-label">通话按键：点击下方输入框，再按想绑定的键（字母、数字、空格、功能键等）</span>
+                  <input data-testid="ptt-key-binding" aria-label="通话按键" readOnly
+                    value={pttKeyLabel(s.pttKey)}
+                    onKeyDown={(event) => {
+                      event.preventDefault(); event.stopPropagation();
+                      if (!event.repeat && event.code && event.code !== 'Unidentified') {
+                        store.updateSettings({ pttKey: event.code });
+                      }
+                    }} />
+                  <button type="button" className="btn-cmd" onClick={() => store.updateSettings({ pttKey: 'Shift' })}>恢复 Shift</button>
+                  <small>按住通话键说话，松开发送；与游戏快捷键冲突时优先通话。系统保留按键可能无法被浏览器接收。</small>
+                </label>
                 <div className="setting-two-col">
                   <div className="setting-row-block">
                     <span className="setting-label">
-                      1. 🎙️ 按住 Shift 键麦克风语音指挥模式（开启后按住 Shift 说话识别，仅播报飞行员复诵）：
+                      1. 🎙️ 按住通话键 键麦克风语音指挥模式（开启后按住通话键 说话识别，仅播报飞行员复诵）：
                     </span>
                     <div className="btn-grid-row">
                       <button
@@ -519,8 +533,8 @@ export const GameModals: React.FC = () => {
                         }
                       >
                         {s.enableVoiceControl !== false
-                          ? '🎙️ 按住 Shift 语音指挥：已开启'
-                          : '🎙️ 按住 Shift 语音指挥：已关闭'}
+                          ? '🎙️ 按住通话键 语音指挥：已开启'
+                          : '🎙️ 按住通话键 语音指挥：已关闭'}
                       </button>
                       <button
                         type="button"
@@ -855,7 +869,7 @@ export const GameModals: React.FC = () => {
             </div>
 
             <p className="modal-desc">
-              您已在【海湾国际机场 (ZSHB)】圆满完成新手教学全部课程与实操带飞考核，熟练掌握了雷达标牌判读、进程单管理、鼠标拖拽航向引导、Shift 语音指挥以及盲降/起飞/移交全套管制流程！
+              您已在【海湾国际机场 (ZSHB)】圆满完成新手教学全部课程与实操带飞考核，熟练掌握了雷达标牌判读、进程单管理、鼠标拖拽航向引导、通话键语音指挥以及盲降/起飞/移交全套管制流程！
             </p>
 
             <div className="score-summary-box">
@@ -1099,16 +1113,16 @@ export const GameModals: React.FC = () => {
                 ATC2.0 SOP · 语音指挥与民航管制规范
               </div>
               <h2 className="modal-heading">
-                空中交通管制操作手册与 Shift 语音指挥指南
+                空中交通管制操作手册与 通话键语音指挥指南
               </h2>
             </div>
 
             <div className="help-grid">
               <div className="help-section">
-                <h3>1. 🎙️ 按住 Shift 话筒模糊语音指挥 (ATC2.0 核心)</h3>
+                <h3>1. 🎙️ 按住通话键 话筒模糊语音指挥 (ATC2.0 核心)</h3>
                 <ul>
                   <li>
-                    <strong>一键按住说话</strong>：按住键盘 <code>Shift</code> 键（或按住右侧话筒按钮）对着麦克风说出指令，松开后自动识别执行，且语音里<strong>只播放飞行员的复诵声音</strong>。
+                    <strong>一键按住说话</strong>：按住键盘 <code>{pttKeyLabel(s.pttKey)}</code> 键（或按住右侧话筒按钮）对着麦克风说出指令，松开后自动识别执行，且语音里<strong>只播放飞行员的复诵声音</strong>。
                   </li>
                   <li>
                     <strong>支持模糊口语识别</strong>：无需背诵标准术语，直接说 <code>“下600”</code>、<code>“降到900米”</code>、<code>“可以盲降”</code>、<code>“引导五边”</code>、<code>“左转090”</code>、<code>“减速180”</code>、<code>“起飞”</code>、<code>“移交”</code> 或 <code>“东航5213下600盲降”</code> 即可执行！

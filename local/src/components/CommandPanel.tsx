@@ -603,11 +603,11 @@ export const CommandPanel: React.FC = () => {
                 onMouseDown={handlePttMouseDown}
                 onMouseUp={handlePttMouseUp}
                 onMouseLeave={handlePttMouseUp}
-                title="按住 Shift 或话筒说话，松开发送指令"
+                title="按住通话键 或话筒说话，松开发送指令"
               >
                 {store.voicePtt.isListening
                   ? '🎙️ 正在收音，松开发送…'
-                  : '🎙️ 按住 Shift 键或按住此处话筒语音指挥'}
+                  : '🎙️ 按住通话键或按住此处话筒语音指挥'}
               </button>
             </div>
             {/* 快捷模糊口语规范化演练按钮 */}

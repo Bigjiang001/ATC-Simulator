@@ -64,6 +64,8 @@ class QwenBridge:
                 raise RuntimeError("Qwen synthesis timed out; no substitute voice was used")
             if "error" in response:
                 raise RuntimeError(response["error"])
+            self.info["last_timings"] = {**response.get("timings", {}), "total_ms": response.get("latency_ms", 0)}
+            print(f"[Qwen TTS] {self.info['last_timings']}", flush=True)
             return base64.b64decode(response["audio"], validate=True)
 
     def close(self):

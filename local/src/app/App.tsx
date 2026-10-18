@@ -1,3 +1,4 @@
+import { matchesPttKey } from '../atc/pttKey';
 import { uiText } from '../i18n/language';
 import React, { useEffect, useRef } from 'react';
 import { useGameStore } from '../game/store';
@@ -56,7 +57,7 @@ export const App: React.FC = () => {
         isListening: true,
         pipelineStage: 'SHIFT_RECORDING',
         interimTranscript:
-          '正在收音，请说出指令，松开 Shift 发送…',
+          '正在收音，请说出指令，松开 通话键发送…',
         statusType: 'LISTENING',
       });
 
@@ -67,7 +68,7 @@ export const App: React.FC = () => {
           useGameStore.getState().setVoicePttState({
             interimTranscript: liveText
               ? `🎤 ${volBar}实时识别中: “${liveText}”`
-              : `🎤 ${volBar}正在收音，请说话（说完后松开 Shift 键立即执行）...`,
+              : `🎤 ${volBar}正在收音，请说话（说完后松开 通话键立即执行）...`,
           });
         })
         .then((res) => {
@@ -139,7 +140,7 @@ export const App: React.FC = () => {
               pipelineStage: 'IDLE',
               interimTranscript: '',
               lastSummaryCn:
-                '未检测到清晰语音片段（请按住 Shift 键不放、说完指令后再松开）',
+                '未检测到清晰语音片段（请按住 通话键不放、说完指令后再松开）',
               statusType: 'IDLE',
             });
           }
@@ -184,16 +185,17 @@ export const App: React.FC = () => {
       const tag = targetEl?.tagName;
       const isTextInput =
         tag === 'TEXTAREA' ||
-        (tag === 'INPUT' && (targetEl as HTMLInputElement).type === 'text');
+        tag === 'INPUT' || tag === 'SELECT' || Boolean(targetEl?.isContentEditable);
 
       // 兼容 Windows 11 中文输入法状态下按 Shift 返回 e.key === 'Process' 但 e.code === 'ShiftLeft'/'ShiftRight' 的情况！
       const isShiftKey =
-        e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
+        matchesPttKey(e, useGameStore.getState().settings.pttKey);
 
       const st = useGameStore.getState();
 
-      if (isShiftKey && !isTextInput && !e.repeat && st.settings.enableVoiceControl && !st.showPreGameLobby) {
-        startPttListening();
+      if (isShiftKey && !isTextInput && st.settings.enableVoiceControl && !st.showPreGameLobby && !st.showSettingsModal) {
+        e.preventDefault();
+        if (!e.repeat) startPttListening();
         return;
       }
 
@@ -247,8 +249,9 @@ export const App: React.FC = () => {
 
     const onKeyUp = (e: KeyboardEvent) => {
       const isShiftKey =
-        e.key === 'Shift' || e.code === 'ShiftLeft' || e.code === 'ShiftRight';
-      if (isShiftKey) {
+        matchesPttKey(e, useGameStore.getState().settings.pttKey);
+      if (isShiftKey && shiftHeldRef.current) {
+        e.preventDefault();
         stopPttListening();
       }
     };

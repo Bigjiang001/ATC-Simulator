@@ -1,5 +1,27 @@
 // Display translations only. Simulation data, radio logs and speech input stay in their original language.
 export const EN_UI: Record<string, string> = {
+  "通话键立即执行": "release the PTT key to execute",
+  "通话键不放": "hold the PTT key",
+  "请再次按住通话键说话即可识别": "hold the PTT key again to speak",
+  "请按住通话键不放": "please keep holding the PTT key",
+  "按住通话键或按住此处话筒语音指挥": "hold the PTT key or this microphone to speak",
+  "按住通话键可通过话筒语音下达指令": "hold the PTT key to issue a voice instruction",
+
+  "正在收音，请说出指令，松开 通话键发送…": "Listening; speak your instruction and release PTT key to send\u2026",
+  "按住通话键 或话筒说话，松开发送指令": "Hold PTT key or the microphone to speak; release to send",
+  "小键盘": "Numpad",
+  "空格": "Space",
+  "通话按键": "Push-to-talk key",
+  "点击下方输入框": "Click the field below",
+  "再按想绑定的键": "then press the desired key",
+  "字母": "letters",
+  "数字": "digits",
+  "功能键等": "function keys, etc.",
+  "恢复": "Reset",
+  "与游戏快捷键冲突时优先通话": "Push-to-talk takes priority over game shortcuts",
+  "系统保留按键可能无法被浏览器接收": "System-reserved keys may not reach the browser",
+  "通话键": "push-to-talk key",
+
   "请说出指令": "speak your instruction",
   "正在识别指令": "Recognizing instruction",
   "请稍候": "please wait",
