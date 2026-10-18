@@ -1,0 +1,13 @@
+{
+  "enabled": false,
+  "ga4MeasurementId": "",
+  "firebase": {
+    "apiKey": "",
+    "authDomain": "",
+    "databaseURL": "",
+    "projectId": "",
+    "appId": ""
+  },
+  "functionsRegion": "asia-southeast1",
+  "appCheckSiteKey": ""
+}

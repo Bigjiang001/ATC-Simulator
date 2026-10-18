@@ -34,6 +34,8 @@ jobs:
       - name: Run regression tests
         run: npm test
       - name: Build ATC2.0 site and browser game
+        env:
+          ATC_ANALYTICS_CONFIG_JSON: ${{ vars.ATC_ANALYTICS_CONFIG_JSON }}
         run: npm run build
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

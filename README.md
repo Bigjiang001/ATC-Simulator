@@ -89,3 +89,9 @@ npm run preview
 项目代码采用 [MIT License](LICENSE)，模型、依赖及第三方素材按各自许可使用。
 
 由 **BIG JIANG STUDIO** 设计开发。
+
+## 网站访问分析与管理员统计
+
+Mac 用户双击根目录的 `打开统计面板.command`，自动验证本机身份，查看访问量、实时游戏玩家、有效游玩时长及趋势图。当前使用 Firebase Spark 免费方案，无需绑定银行卡；玩家无需注册。本机服务仅返回汇总，原始玩家记录不会发送到面板浏览器。
+
+首页、游戏 UI 与 GitHub Pages 路径保持不变。公开生产配置已接入构建流程，每次发布自动保留统计。完整指标口径、Google Analytics / Firebase 后台步骤、权限与免费额度边界见[配置说明](docs/analytics.md)。

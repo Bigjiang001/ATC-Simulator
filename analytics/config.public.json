@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "ga4MeasurementId": "G-ZY4BYQD11Q",
+  "firebase": {
+    "apiKey": "AIzaSyDFxERHDMTJ1dCl3bcLdk7cCxLnuiaS80M",
+    "authDomain": "project-5127246643163647096.firebaseapp.com",
+    "projectId": "project-5127246643163647096",
+    "messagingSenderId": "461062640908",
+    "appId": "1:461062640908:web:64a919302ad7f9e000e529",
+    "databaseURL": "https://project-5127246643163647096-default-rtdb.asia-southeast1.firebasedatabase.app"
+  },
+  "functionsRegion": "asia-southeast1",
+  "appCheckSiteKey": "",
+  "dashboardMode": "local"
+}

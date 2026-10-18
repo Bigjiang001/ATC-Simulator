@@ -13,3 +13,6 @@ local/dist/
 .env
 .env.*
 *.log
+
+analytics/config.local.json
+.firebase/

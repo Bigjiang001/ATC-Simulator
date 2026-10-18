@@ -5,11 +5,15 @@
   "description": "ATC2.0 browser edition, Web Speech API, static hosting",
   "type": "module",
   "scripts": {
-    "test": "npm --prefix online test && node scripts/check-site.cjs",
+    "test": "node scripts/build-test-site.cjs && npm --prefix online test && node scripts/check-site.cjs && node --test tests/analytics.test.cjs tests/local-admin.test.cjs",
     "build": "node scripts/build-site.cjs",
     "typecheck": "tsc -p online/tsconfig.json --noEmit && tsc -p local/tsconfig.json --noEmit",
-    "test:ui": "node online/scripts/test-browser-ui.cjs",
-    "preview": "node scripts/preview.cjs"
+    "test:ui": "node scripts/build-test-site.cjs && node online/scripts/test-browser-ui.cjs",
+    "preview": "node scripts/preview.cjs",
+    "test:analytics": "node scripts/build-test-site.cjs && node --test tests/analytics.test.cjs",
+    "test:analytics:rules": "npm --prefix tests/firebase test",
+    "test:analytics:browser": "npm run build && node tests/analytics-browser.cjs",
+    "admin": "node scripts/open-admin.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",

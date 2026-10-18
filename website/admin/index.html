@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer">
+<title>ATC Simulator · 数据中心</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,-apple-system,sans-serif;background:#08111e;color:#e9f2fb}*{box-sizing:border-box}body{max-width:1440px;margin:36px auto;padding:0 30px}h1{font-size:30px;letter-spacing:-1px;margin:8px 0}h2{font-size:19px;margin:0}a{color:#75daca;text-decoration:none}button,select{font:inherit;padding:10px 14px;border:1px solid #30465f;border-radius:8px;background:#122136;color:inherit;cursor:pointer}button:disabled{opacity:.5}.eyebrow{font-size:12px;letter-spacing:3px;color:#7be8d0}.note,#status{color:#8ea5bc;line-height:1.8;font-size:13px}.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin:24px 0}.card{padding:22px 20px;background:linear-gradient(145deg,#14253b,#0f1b2d);border:1px solid #253a52;border-radius:14px}.card strong{display:block;font-size:34px;margin:12px 0 4px;font-variant-numeric:tabular-nums}.card small{color:#819ab4}.card.live{border-color:#2b8b7b}.card.live strong{color:#7be8d0}.muted{color:#9cb0c4;font-size:13px}.box{padding:24px;background:#0d192a;border:1px solid #263b50;border-radius:14px;margin:20px 0}.toolbar,header,.chart-head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}.toolbar label{font-size:13px;color:#a9bdd1}.toolbar .actions{display:flex;gap:10px;align-items:center}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;white-space:nowrap;font-size:14px}th,td{text-align:right;padding:15px 12px;border-bottom:1px solid #203148}th{color:#8da6bf;font-weight:500}th:first-child,td:first-child{text-align:left}#chart{margin-top:24px;min-height:200px}#chart svg{width:100%;display:block}#connection{color:#7be8d0;font-size:12px;background:#102b2a;padding:8px 12px;border-radius:30px}.empty{padding:16px;border:1px dashed #365168;border-radius:10px;color:#9bb3c9;margin-top:20px;font-size:14px}[hidden]{display:none!important}@media(max-width:640px){body{padding:0 16px;margin:24px auto}.cards{grid-template-columns:1fr 1fr}.card{padding:16px}.card strong{font-size:29px}.box{padding:16px}h1{font-size:25px}}
+</style>
+</head>
+<body>
+<header><div><div class="eyebrow">ATC SIMULATOR / ANALYTICS</div><h1>网站与游戏数据中心</h1><div class="note" id="mode">按北京时间汇总 · 仅管理员可访问</div></div><div class="actions"><span id="connection">● 正在连接</span></div></header>
+<p class="note"><a href="https://bigjiang001.github.io/ATC-Simulator/" target="_blank" rel="noopener">查看 ATC-Simulator 网站 ↗</a></p>
+<button id="login" type="button">Google 管理员登录</button> <button id="logout" type="button" hidden>退出登录</button>
+<p id="status" role="status">正在读取真实统计数据…</p>
+<section id="panel" hidden aria-label="访问与游戏统计">
+<div class="cards">
+<div class="card">今日浏览量<strong id="views">—</strong><small>PV · 包含刷新及重复访问</small></div>
+<div class="card">今日网站访客<strong id="visitors">—</strong><small>UV · 按匿名身份去重</small></div>
+<div class="card">今日游戏访客<strong id="gameVisitors">—</strong><small>打开过游戏页</small></div>
+<div class="card">今日实际玩家<strong id="players">—</strong><small>开始或持续游玩的访客</small></div>
+<div class="card live">实时游戏玩家<strong id="online">—</strong><small>前台活跃 · 同身份去重</small></div>
+<div class="card">今日开局数<strong id="starts">—</strong><small>暂停恢复不会重复计局</small></div>
+<div class="card">今日游玩时长<strong id="duration">—</strong><small>有效分钟 · 排除暂停与闲置</small></div>
+</div>
+<div class="toolbar"><label>统计范围 <select id="days"><option value="7">最近 7 天</option><option value="30" selected>最近 30 天</option><option value="90">最近 90 天</option></select></label><div class="actions"><span id="range-summary" class="note"></span><button id="refresh" type="button">刷新数据</button></div></div>
+<div id="empty" class="empty" hidden>连接成功，目前还没有访问记录。统计从接入后开始；历史访问不会被补算。有人访问网站或游玩后，这里的数据与图表会自动更新。</div>
+<div class="box"><div class="chart-head"><h2 id="chart-title">网站访问趋势</h2><select id="metric" aria-label="图表指标"><option value="views">页面浏览量</option><option value="visitors">网站访客</option><option value="players">实际玩家</option><option value="starts">游戏开局数</option><option value="activeMs">游玩时长</option></select></div><div id="chart"></div></div>
+<div class="box"><div class="chart-head"><h2>每日数据明细</h2><span class="muted">最新日期在前</span></div><div class="scroll"><table><thead><tr><th>日期</th><th>浏览量</th><th>网站访客</th><th>游戏访客</th><th>实际玩家</th><th>开局数</th><th>游玩分钟</th></tr></thead><tbody id="rows"></tbody></table></div></div>
+<p class="note">同一浏览器的多个标签页只计一个访客及在线玩家；无痕窗口、清理站点数据或更换设备可能产生新的匿名身份。实时游戏玩家仅包含前台、未暂停、最近 5 分钟有操作且心跳未过期的人。异常断线最长约 90 秒过期，再加一次面板刷新延迟。时长按每局累计，排除暂停、后台、断网及闲置；异常退出可能损失末次上报前约 30 秒时长。所有图表均来自真实 Firebase 记录。</p>
+</section>
+</body>
+</html>

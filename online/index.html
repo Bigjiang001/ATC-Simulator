@@ -1546,6 +1546,208 @@ html[lang="en"] .cmd-block-label {
 @media(max-width:700px) { .voice-role-header { flex-wrap:wrap; } .voice-rate-scale { font-size:9px; } }
 
   </style>
+<meta name="atc-page" content="game">
+<script>window.ATC_ANALYTICS_CONFIG={"enabled":true,"ga4MeasurementId":"G-ZY4BYQD11Q","firebase":{"apiKey":"AIzaSyDFxERHDMTJ1dCl3bcLdk7cCxLnuiaS80M","authDomain":"project-5127246643163647096.firebaseapp.com","projectId":"project-5127246643163647096","messagingSenderId":"461062640908","appId":"1:461062640908:web:64a919302ad7f9e000e529","databaseURL":"https://project-5127246643163647096-default-rtdb.asia-southeast1.firebasedatabase.app"},"functionsRegion":"asia-southeast1","appCheckSiteKey":"","dashboardMode":"local"};</script>
+<script>/* Shared by the browser and Node tests. All times are real milliseconds, never simulation time. */
+(function (root) {
+  'use strict';
+  const DAY = 86400000, OFFSET = 28800000, IDLE = 300000, LEASE = 90000;
+  const dayKey = now => String(now - ((now + OFFSET) % DAY));
+  class Tracker {
+    constructor(kind, now, emit = () => {}) {
+      this.kind = kind; this.emit = emit; this.records = {}; this.round = false;
+      this.status = 'BRIEFING'; this.paused = true; this.visible = true;
+      this.connected = false; this.lastInput = now; this.lastWall = now;
+      this.roundMs = 0; this.generation = -1; this.previousActive = false;
+      this.record(now).views = 1;
+    }
+    record(now) {
+      const key = dayKey(now);
+      return this.records[key] ||= { views: 0, site: true, game: this.kind === 'game', player: false, starts: 0, ends: 0, activeMs: 0 };
+    }
+    active(now) {
+      return this.kind === 'game' && this.round && this.status === 'RUNNING' && !this.paused &&
+        this.visible && this.connected && now - this.lastInput < IDLE;
+    }
+    tick(now) {
+      const active = this.active(now);
+      // A suspended process must never backfill hours of imaginary play.
+      const elapsed = Math.max(0, Math.min(1500, now - this.lastWall));
+      if (this.previousActive && active && elapsed) {
+        let from = now - elapsed;
+        while (from < now) {
+          const until = Math.min(now, Number(dayKey(from)) + DAY);
+          const r = this.record(from); r.player = true; r.activeMs += until - from;
+          this.roundMs += until - from; from = until;
+        }
+      }
+      if (this.visible) this.record(now);
+      this.lastWall = now; this.previousActive = active;
+    }
+    environment(patch, now) {
+      this.tick(now); Object.assign(this, patch); this.previousActive = this.active(now);
+    }
+    input(now) { this.environment({ lastInput: now }, now); }
+    finish(reason, now) {
+      if (!this.round) return;
+      this.record(now).ends++; this.emit('game_end', { reason, active_seconds: Math.floor(this.roundMs / 1000) });
+      this.round = false; this.roundMs = 0;
+    }
+    game(state, now) {
+      this.tick(now);
+      if (this.generation !== -1 && state.generation !== this.generation) this.finish('restart', now);
+      this.generation = state.generation;
+      if (['BRIEFING', 'VICTORY', 'GAMEOVER'].includes(state.status)) this.finish(state.status.toLowerCase(), now);
+      this.status = state.status; this.paused = state.paused;
+      if (!this.round && this.status === 'RUNNING' && !this.paused) {
+        this.round = true; this.roundMs = 0; this.lastInput = now;
+        const r = this.record(now); r.starts++; r.player = true;
+        this.emit('game_start', { airport: state.airport, difficulty: state.difficulty });
+      }
+      this.previousActive = this.active(now);
+    }
+  }
+  root.ATCAnalyticsCore = { Tracker, dayKey, DAY, OFFSET, IDLE, LEASE };
+})(typeof globalThis === 'object' ? globalThis : window);
+</script>
+<script type="module">(async function () {
+  'use strict';
+  const config = window.ATC_ANALYTICS_CONFIG;
+  if (!config?.enabled || !/^https?:$/.test(location.protocol)) return;
+  const kind = document.querySelector('meta[name="atc-page"]')?.content || 'home';
+  if (kind === 'admin') return;
+  const { Tracker, dayKey, DAY } = window.ATCAnalyticsCore;
+  const clock = () => Date.now() + offset;
+  let offset = 0, stopped = false, flushing = false, connected = false, presenceReady = false, presencePublished = false, appCheckReady = false;
+  const tab = crypto.randomUUID(); // New for every document, including duplicated tabs.
+  const ga = (event, params = {}) => {
+    if (!/^G-[A-Z0-9]+$/.test(config.ga4MeasurementId || '')) return;
+    window.gtag('event', event, params);
+  };
+  if (/^G-[A-Z0-9]+$/.test(config.ga4MeasurementId || '')) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', config.ga4MeasurementId, { send_page_view: false, allow_google_signals: false });
+    const script = document.createElement('script'); script.async = true;
+    script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(config.ga4MeasurementId);
+    document.head.appendChild(script);
+    // Exclude query/hash, which may contain user-provided text.
+    ga('page_view', { page_location: location.origin + location.pathname, page_title: document.title, page_type: kind });
+    ga(kind === 'game' ? 'game_page_view' : 'home_page_view');
+  }
+  const tracker = new Tracker(kind, clock(), ga);
+  tracker.visible = document.visibilityState === 'visible';
+  const state = event => tracker.game(event.detail, clock());
+  window.addEventListener('atc:state', state);
+  if (window.__ATC_GAME_STATE__) tracker.game(window.__ATC_GAME_STATE__, clock());
+  let flush = () => {};
+  const environment = patch => { tracker.environment(patch, clock()); void flush(); };
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel'])
+    window.addEventListener(type, event => { if (event.isTrusted) tracker.input(clock()); }, { passive: true });
+  document.addEventListener('visibilitychange', () => environment({ visible: document.visibilityState === 'visible' }));
+  window.addEventListener('offline', () => environment({ connected: false }));
+  window.addEventListener('pagehide', event => {
+    tracker.tick(clock());
+    if (!event.persisted) tracker.finish('pagehide', clock());
+    stopped = true;
+    environment({ visible: false }); // Best effort only; disconnect + lease is authoritative.
+  });
+  window.addEventListener('pageshow', e => {
+    if (!e.persisted) return;
+    stopped = false; environment({ visible: document.visibilityState === 'visible' });
+    if (window.__ATC_GAME_STATE__) tracker.game(window.__ATC_GAME_STATE__, clock());
+  });
+  setInterval(() => {
+    // Catch gamepads without changing the game's input loop.
+    if (navigator.getGamepads?.().some(p => p && (p.buttons.some(b => b.pressed) || p.axes.some(a => Math.abs(a) > .2)))) tracker.input(clock());
+    const wasActive = tracker.previousActive; tracker.tick(clock());
+    if (wasActive !== tracker.previousActive) void flush();
+  }, 1000);
+  async function connect() {
+  try {
+    const base = 'https://www.gstatic.com/firebasejs/12.4.0/';
+    const [appSDK, authSDK, dbSDK] = await Promise.all([
+      import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-database.js')
+    ]);
+    const app = appSDK.getApps().find(a => a.name === 'atc-visitors') || appSDK.initializeApp(config.firebase, 'atc-visitors');
+    if (config.appCheckSiteKey && !appCheckReady) {
+      const ac = await import(base + 'firebase-app-check.js');
+      ac.initializeAppCheck(app, { provider: new ac.ReCaptchaV3Provider(config.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+      appCheckReady = true;
+    }
+    const auth = authSDK.getAuth(app);
+    const login = async () => {
+      await auth.authStateReady();
+      if (!auth.currentUser) await authSDK.signInAnonymously(auth);
+      return auth.currentUser;
+    };
+    // Firebase persistence shares identity; the lock prevents simultaneous first-visit signup races.
+    const user = navigator.locks ? await navigator.locks.request('atc-anonymous-signin', login) : await login();
+    if (!user?.isAnonymous) throw new Error('Visitor identity must be anonymous');
+    const db = dbSDK.getDatabase(app), presence = dbSDK.ref(db, 'presence/' + tab);
+    let hasConnected = false;
+    dbSDK.onValue(dbSDK.ref(db, '.info/serverTimeOffset'), s => {
+      const next = Number(s.val()) || 0;
+      if (Math.abs(next - offset) > 1000) {
+        const delta = next - offset; tracker.lastWall += delta; tracker.lastInput += delta;
+        if (!hasConnected) {
+          const values = Object.values(tracker.records); tracker.records = {};
+          const r = tracker.record(Date.now() + next);
+          for (const v of values) { r.player ||= v.player; r.starts += v.starts; r.ends += v.ends; r.views += v.views || 0; }
+        }
+      }
+      offset = next;
+    });
+    const sent = {};
+    flush = async () => {
+      if (!connected || !presenceReady || flushing) return;
+      flushing = true;
+      try {
+        tracker.tick(clock());
+        const active = !stopped && tracker.active(clock());
+        // Use an estimated server time (not serverTimestamp), so queued writes cannot resurrect old activity.
+        if (active) {
+          await dbSDK.set(presence, { uid: user.uid, lastSeen: clock(), active: true });
+          presencePublished = true;
+        } else if (presencePublished) { await dbSDK.remove(presence); presencePublished = false; }
+        for (const [day, values] of Object.entries(tracker.records)) {
+          if (Number(day) < Number(dayKey(clock())) - DAY) { delete tracker.records[day]; delete sent[day]; continue; }
+          const serialized = JSON.stringify(values);
+          if (sent[day] === serialized) continue;
+          // Never queue a new write when a known disconnect occurs.
+          if (!connected) break;
+          await dbSDK.set(dbSDK.ref(db, `activity/${day}/${user.uid}/${tab}`), { ...values, updatedAt: clock() });
+          sent[day] = serialized;
+        }
+      } catch (error) { console.warn('[ATC statistics] Write failed; will retry', error.code || error.message); }
+      finally { flushing = false; }
+    };
+    let connectionEpoch = 0;
+    dbSDK.onValue(dbSDK.ref(db, '.info/connected'), async snapshot => {
+      const epoch = ++connectionEpoch;
+      connected = snapshot.val() === true; presenceReady = false; presencePublished = false;
+      tracker.environment({ connected: false }, clock());
+      if (!connected) return;
+      try {
+        // Register on the server BEFORE publishing presence, and re-register on every reconnect.
+        await dbSDK.onDisconnect(presence).remove();
+        if (epoch !== connectionEpoch) return;
+        hasConnected = true; presenceReady = true; tracker.environment({ connected: true }, clock());
+        await flush();
+      } catch (error) { console.warn('[ATC statistics] Presence unavailable', error.code || error.message); }
+    });
+    // 30 seconds balances freshness, write volume and free quota consumption.
+    setInterval(() => void flush(), 30000);
+    window.addEventListener('atc:state', () => void flush());
+  } catch (error) {
+    console.warn('[ATC statistics] Service unavailable; retrying in 30 seconds', error.code || error.message);
+    setTimeout(() => { if (!stopped) void connect(); }, 30000);
+  }
+  }
+  void connect();
+})();
+</script>
 </head>
 <body>
   <div id="root"></div>
@@ -12764,6 +12966,43 @@ function drawScaleAndWindIndicator(ctx, width, height, pxPerNM, weather, activeD
 }
   };
 
+  modules["game/analytics"] = function(module, exports, require) {
+    const React = window.__MINI_REACT__;
+    "use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.markAnalyticsRound = markAnalyticsRound;
+exports.reportAnalyticsState = reportAnalyticsState;
+// Emit lifecycle metadata only. No dependency on a network SDK, and no effect on simulation state.
+let generation = 0;
+function markAnalyticsRound(state) {
+  generation++;
+  return state;
+}
+let previous = '';
+function reportAnalyticsState(state) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  const detail = {
+    generation,
+    status: state.showPreGameLobby ? 'BRIEFING' : state.status,
+    paused: state.isPaused,
+    airport: state.settings.airportId,
+    difficulty: state.difficulty
+  };
+  const key = JSON.stringify(detail);
+  if (key === previous) return;
+  previous = key;
+  window.__ATC_GAME_STATE__ = detail;
+  try {
+    window.dispatchEvent(new CustomEvent('atc:state', {
+      detail
+    }));
+  } catch {/* Optional telemetry. */}
+}
+  };
+
   modules["game/store"] = function(module, exports, require) {
     const React = window.__MINI_REACT__;
     "use strict";
@@ -12778,6 +13017,7 @@ Object.defineProperty(exports, "formatAltitudeSpeechCn", {
   }
 });
 exports.useGameStore = useGameStore;
+var _analytics = require("game/analytics");
 var _missions = require("game/missions");
 var _language = require("i18n/language");
 var _react = require("react");
@@ -12867,7 +13107,7 @@ const DEFAULT_VIEWPORT = {
 class StoreContainer {
   listeners = new Set();
   constructor() {
-    const initialSim = (0, _engine.createInitialSimulationState)('NORMAL', false);
+    const initialSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('NORMAL', false));
     const initialCareer = loadCareerProfile();
     const voices = (0, _voiceCatalog.loadVoicePreferences)(initialSim.settings.atcVoice, initialSim.settings.pilotVoice);
     initialSim.settings = {
@@ -12884,7 +13124,7 @@ class StoreContainer {
         const mission = _missions.MISSIONS.find(item => item.id === id);
         if (!mission || !(0, _missions.isMissionUnlocked)(id, cur.missionProgress)) return;
         _soundEngine.soundEngine.stopAllSpeech();
-        const sim = (0, _missions.createMissionState)(mission, cur.settings);
+        const sim = (0, _analytics.markAnalyticsRound)((0, _missions.createMissionState)(mission, cur.settings));
         this.setState({
           ...sim,
           gameSpeed: 1,
@@ -13131,10 +13371,10 @@ class StoreContainer {
       setDifficulty: difficulty => {
         const cur = this.state;
         if (cur.showPreGameLobby) {
-          const freshSim = (0, _engine.createInitialSimulationState)(difficulty, false, {
+          const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(difficulty, false, {
             ...cur.settings,
             difficulty
-          });
+          }));
           this.setState({
             ...freshSim,
             gameSpeed: cur.gameSpeed,
@@ -13170,7 +13410,7 @@ class StoreContainer {
           (0, _voiceCatalog.saveVoicePreferences)(mergedSettings.atcVoice, mergedSettings.pilotVoice);
         }
         if (restartShift) {
-          const freshSim = (0, _engine.createInitialSimulationState)(mergedSettings.difficulty, !cur.showPreGameLobby, mergedSettings);
+          const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(mergedSettings.difficulty, !cur.showPreGameLobby, mergedSettings));
           this.setState({
             ...freshSim,
             gameSpeed: cur.gameSpeed,
@@ -13210,7 +13450,7 @@ class StoreContainer {
           ...cur.settings,
           ...newSettings
         };
-        const freshSim = (0, _engine.createInitialSimulationState)(mergedSettings.difficulty, true, mergedSettings);
+        const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(mergedSettings.difficulty, true, mergedSettings));
         _soundEngine.soundEngine.play('COMMAND');
         this.setState({
           ...freshSim,
@@ -13248,7 +13488,7 @@ class StoreContainer {
             enableRestrictedZones: true,
             enableEmergencies: true
           };
-          const sim = (0, _engine.createInitialSimulationState)('NORMAL', true, settings);
+          const sim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('NORMAL', true, settings));
           _soundEngine.soundEngine.play('COMMAND');
           this.setState({
             ...sim,
@@ -13276,7 +13516,7 @@ class StoreContainer {
             enableRestrictedZones: false,
             enableEmergencies: true
           };
-          let sim = (0, _engine.createInitialSimulationState)('NORMAL', true, settings);
+          let sim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('NORMAL', true, settings));
           sim = (0, _engine.spawnEmergencyFlightInState)(sim, 'SQUAWK_7700_FUEL');
           this.consumeSounds(sim.pendingSoundEvents, sim.pendingSpeechItems, true);
           this.setState({
@@ -13308,7 +13548,7 @@ class StoreContainer {
             enableRestrictedZones: true,
             enableEmergencies: true
           };
-          const sim = (0, _engine.createInitialSimulationState)('HARD', true, settings);
+          const sim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('HARD', true, settings));
           _soundEngine.soundEngine.play('COMMAND');
           this.setState({
             ...sim,
@@ -13342,10 +13582,10 @@ class StoreContainer {
           return;
         }
         const targetDiff = difficulty || cur.difficulty;
-        const freshSim = (0, _engine.createInitialSimulationState)(targetDiff, autoStart, {
+        const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(targetDiff, autoStart, {
           ...cur.settings,
           difficulty: targetDiff
-        });
+        }));
         this.setState({
           ...freshSim,
           gameSpeed: cur.gameSpeed,
@@ -13554,7 +13794,7 @@ class StoreContainer {
           enableEmergencies: false,
           enableRookieCoach: true
         };
-        const freshSim = (0, _engine.createInitialSimulationState)('EASY', false, tutorialSettings);
+        const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('EASY', false, tutorialSettings));
         freshSim.trafficCap = 3;
         freshSim.landedTarget = 2;
         freshSim.departedTarget = 1;
@@ -13791,6 +14031,7 @@ class StoreContainer {
       ...this.state,
       ...partial
     };
+    (0, _analytics.reportAnalyticsState)(this.state);
     this.listeners.forEach(l => l());
   };
   subscribe = listener => {

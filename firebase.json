@@ -1,0 +1,5 @@
+{
+  "database": { "rules": "firebase/database.rules.json" },
+  "functions": [{ "source": "firebase/functions", "codebase": "statistics", "ignore": ["node_modules", "*.log"] }],
+  "emulators": { "auth": { "port": 9099 }, "database": { "port": 9000 }, "functions": { "port": 5001 }, "ui": { "enabled": false } }
+}

@@ -1,0 +1,70 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "presence": {
+      ".indexOn": [
+        "lastSeen"
+      ],
+      "$tab": {
+        ".read": "auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && data.child('uid').val() == auth.uid",
+        ".write": "auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && (!data.exists() || data.child('uid').val() == auth.uid)",
+        ".validate": "$tab.matches(/^[a-f0-9-]{36}$/) && newData.hasChildren(['uid', 'lastSeen', 'active'])",
+        "uid": {
+          ".validate": "newData.val() == auth.uid"
+        },
+        "lastSeen": {
+          ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 90000"
+        },
+        "active": {
+          ".validate": "newData.val() == true"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "activity": {
+      "$day": {
+        "$uid": {
+          "$tab": {
+            ".read": "auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && auth.uid == $uid",
+            ".write": "auth != null && auth.token.firebase.sign_in_provider == 'anonymous' && auth.uid == $uid && newData.exists()",
+            ".validate": "$tab.matches(/^[a-f0-9-]{36}$/) && newData.hasChildren(['site', 'game', 'player', 'starts', 'ends', 'activeMs', 'updatedAt']) && ($day == '' + (now - ((now + 28800000) % 86400000)) || $day == '' + (now - ((now + 28800000) % 86400000) - 86400000)) && ((newData.child('starts').val() == 0 && newData.child('activeMs').val() == 0) || newData.child('player').val() == true)",
+            "site": {
+              ".validate": "newData.val() == true"
+            },
+            "game": {
+              ".validate": "newData.isBoolean() && (!data.exists() || data.val() != true || newData.val() == true)"
+            },
+            "player": {
+              ".validate": "newData.isBoolean() && (!data.exists() || data.val() != true || newData.val() == true) && (newData.val() != true || newData.parent().child('game').val() == true)"
+            },
+            "updatedAt": {
+              ".validate": "newData.isNumber() && newData.val() <= now + 5000 && newData.val() >= now - 90000 && (!data.exists() || newData.val() >= data.val())"
+            },
+            "$other": {
+              ".validate": false
+            },
+            "starts": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2000 && newData.val() % 1 == 0 && (!data.exists() || newData.val() >= data.val())"
+            },
+            "ends": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2000 && newData.val() % 1 == 0 && (!data.exists() || newData.val() >= data.val()) && newData.val() <= newData.parent().child('starts').val() + 1"
+            },
+            "activeMs": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 86400000 && newData.val() % 1 == 0 && (!data.exists() || newData.val() >= data.val()) && (!data.exists() || newData.val() - data.val() <= now - data.parent().child('updatedAt').val() + 5000)"
+            },
+            "views": {
+              ".validate": "newData.isNumber() && (newData.val() == 0 || newData.val() == 1) && (!data.exists() || newData.val() >= data.val())"
+            }
+          }
+        }
+      }
+    },
+    "reports": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}

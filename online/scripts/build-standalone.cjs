@@ -1,4 +1,5 @@
 const fs = require('fs');
+const { inject } = require('../../scripts/analytics-build.cjs');
 const path = require('path');
 
 function resolveBabelModule(pkgName) {
@@ -34,6 +35,7 @@ const MODULE_FILES = [
   { id: 'audio/voiceCatalog', file: 'src/audio/voiceCatalog.ts' },
   { id: 'audio/soundEngine', file: 'src/audio/soundEngine.ts' },
   { id: 'radar/renderer', file: 'src/radar/renderer.ts' },
+  { id: 'game/analytics', file: 'src/game/analytics.ts' },
   { id: 'game/store', file: 'src/game/store.ts' },
   { id: 'components/TopStatusBar', file: 'src/components/TopStatusBar.tsx' },
   { id: 'components/RadarScopeCanvas', file: 'src/components/RadarScopeCanvas.tsx' },
@@ -476,7 +478,7 @@ const moduleRegistrations = compiledModules
   )
   .join('\n');
 
-const fullHtml = `<!DOCTYPE html>
+const sourceHtml = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8" />
@@ -543,10 +545,15 @@ ${moduleRegistrations}
 </body>
 </html>`;
 
+const fullHtml = inject(sourceHtml, 'game');
 const ROOT_SIM_HTML_PATH = path.resolve(ROOT_DIR, 'index.html');
 fs.mkdirSync(path.dirname(DIST_HTML_PATH), { recursive: true });
 fs.writeFileSync(ROOT_SIM_HTML_PATH, fullHtml, 'utf8');
 fs.writeFileSync(DIST_HTML_PATH, fullHtml, 'utf8');
+// Keep the checked-in website mirror in sync for direct static previews and regression checks.
+const websiteGamePath = path.resolve(ROOT_DIR, '../website/game/index.html');
+fs.mkdirSync(path.dirname(websiteGamePath), { recursive: true });
+fs.writeFileSync(websiteGamePath, fullHtml, 'utf8');
 fs.writeFileSync(path.resolve(ROOT_DIR, 'dist/.nojekyll'), '', 'utf8');
 
 

@@ -1,3 +1,4 @@
+import { reportAnalyticsState, markAnalyticsRound } from './analytics';
 import { MISSIONS, MissionProgress, loadMissionProgress, saveMissionProgress, isMissionUnlocked, createMissionState, missionStars } from './missions';
 import { UiLanguage, loadUiLanguage, saveUiLanguage } from '../i18n/language';
 import { useEffect, useState } from 'react';
@@ -216,7 +217,7 @@ class StoreContainer {
   private listeners: Set<Listener> = new Set();
 
   constructor() {
-    const initialSim = createInitialSimulationState('NORMAL', false);
+    const initialSim = markAnalyticsRound(createInitialSimulationState('NORMAL', false));
     const initialCareer = loadCareerProfile();
     const voices = loadVoicePreferences(initialSim.settings.atcVoice, initialSim.settings.pilotVoice);
     initialSim.settings = { ...initialSim.settings, atcVoice: voices.atc, pilotVoice: voices.pilot };
@@ -230,7 +231,7 @@ class StoreContainer {
         const mission = MISSIONS.find((item) => item.id === id);
         if (!mission || !isMissionUnlocked(id, cur.missionProgress)) return;
         soundEngine.stopAllSpeech();
-        const sim = createMissionState(mission, cur.settings);
+        const sim = markAnalyticsRound(createMissionState(mission, cur.settings));
         this.setState({ ...sim, gameSpeed: 1, showPreGameLobby: false, showSettingsModal: false,
           lastGameOverSummary: null, missionRun: { id, recorded: false, stars: 0 },
           tutorial: { ...cur.tutorial, active: false, licensePassed: false } });
@@ -477,10 +478,10 @@ class StoreContainer {
       setDifficulty: (difficulty: GameDifficulty) => {
         const cur = this.state;
         if (cur.showPreGameLobby) {
-          const freshSim = createInitialSimulationState(difficulty, false, {
+          const freshSim = markAnalyticsRound(createInitialSimulationState(difficulty, false, {
             ...cur.settings,
             difficulty,
-          });
+          }));
           this.setState({
             ...freshSim,
             gameSpeed: cur.gameSpeed,
@@ -522,11 +523,11 @@ class StoreContainer {
         }
 
         if (restartShift) {
-          const freshSim = createInitialSimulationState(
+          const freshSim = markAnalyticsRound(createInitialSimulationState(
             mergedSettings.difficulty,
             !cur.showPreGameLobby,
             mergedSettings
-          );
+          ));
           this.setState({
             ...freshSim,
             gameSpeed: cur.gameSpeed,
@@ -585,11 +586,11 @@ class StoreContainer {
           ...cur.settings,
           ...newSettings,
         };
-        const freshSim = createInitialSimulationState(
+        const freshSim = markAnalyticsRound(createInitialSimulationState(
           mergedSettings.difficulty,
           true,
           mergedSettings
-        );
+        ));
         soundEngine.play('COMMAND');
         this.setState({
           ...freshSim,
@@ -626,7 +627,7 @@ class StoreContainer {
             enableRestrictedZones: true,
             enableEmergencies: true,
           };
-          const sim = createInitialSimulationState('NORMAL', true, settings);
+          const sim = markAnalyticsRound(createInitialSimulationState('NORMAL', true, settings));
           soundEngine.play('COMMAND');
           this.setState({
             ...sim,
@@ -650,7 +651,7 @@ class StoreContainer {
             enableRestrictedZones: false,
             enableEmergencies: true,
           };
-          let sim = createInitialSimulationState('NORMAL', true, settings);
+          let sim = markAnalyticsRound(createInitialSimulationState('NORMAL', true, settings));
           sim = spawnEmergencyFlightInState(sim, 'SQUAWK_7700_FUEL');
           this.consumeSounds(sim.pendingSoundEvents, sim.pendingSpeechItems, true);
           this.setState({
@@ -678,7 +679,7 @@ class StoreContainer {
             enableRestrictedZones: true,
             enableEmergencies: true,
           };
-          const sim = createInitialSimulationState('HARD', true, settings);
+          const sim = markAnalyticsRound(createInitialSimulationState('HARD', true, settings));
           soundEngine.play('COMMAND');
           this.setState({
             ...sim,
@@ -707,10 +708,10 @@ class StoreContainer {
         const cur = this.state;
         if (cur.missionRun) { cur.startMission(cur.missionRun.id); return; }
         const targetDiff = difficulty || cur.difficulty;
-        const freshSim = createInitialSimulationState(targetDiff, autoStart, {
+        const freshSim = markAnalyticsRound(createInitialSimulationState(targetDiff, autoStart, {
           ...cur.settings,
           difficulty: targetDiff,
-        });
+        }));
         this.setState({
           ...freshSim,
           gameSpeed: cur.gameSpeed,
@@ -911,7 +912,7 @@ class StoreContainer {
           enableEmergencies: false,
           enableRookieCoach: true,
         };
-        const freshSim = createInitialSimulationState('EASY', false, tutorialSettings);
+        const freshSim = markAnalyticsRound(createInitialSimulationState('EASY', false, tutorialSettings));
         freshSim.trafficCap = 3;
         freshSim.landedTarget = 2;
         freshSim.departedTarget = 1;
@@ -1202,6 +1203,7 @@ class StoreContainer {
 
   public setState = (partial: Partial<AtcGameStore>): void => {
     this.state = { ...this.state, ...partial };
+    reportAnalyticsState(this.state);
     this.listeners.forEach((l) => l());
   };
 
