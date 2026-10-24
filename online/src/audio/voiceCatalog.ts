@@ -9,8 +9,8 @@ export function browserVoices(): SpeechSynthesisVoice[] {
   return typeof window !== 'undefined' && window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
 }
 export function voiceGender(name: string): 'FEMALE' | 'MALE' | 'UNKNOWN' {
-  if (/female|woman|女|ting[ -]?ting|婷婷|xiaoxiao|xiaoyi|xiaohan|xiaomo|xiaoxuan|xiaoqiu|xiaorui|huihui|yaoyao|hanhan|meijia|samantha|victoria|karen|moira|tessa|zira|hazel|susan|jenny|aria|ava|sonia/i.test(name)) return 'FEMALE';
-  if (/\bmale\b|\bman\b|男|yunxi|yunjian|yunyang|yunfeng|yunhao|kangkang|zhiwei|zhiyu|david|mark|alex|daniel|fred|george|guy|ryan|andrew|brian/i.test(name)) return 'MALE';
+  if (/female|woman|女|ting[ -]?ting|婷婷|\bmei[ -]?jia\b|\bsin[ -]?ji\b|\byu[ -]?shu\b|xiaoxiao|xiaoyi|xiaohan|xiaomo|xiaoxuan|xiaoqiu|xiaorui|huihui|yaoyao|hanhan|meijia|samantha|victoria|karen|moira|tessa|zira|hazel|susan|jenny|aria|ava|sonia/i.test(name)) return 'FEMALE';
+  if (/(?:^|[^a-z])male(?:$|[^a-z])|\bman\b|男|li[ -]?mu|李慕|yun[ -]?xi|yun[ -]?jian|yun[ -]?yang|云扬|云希|云健|\b(reed|rocko|rishi|aaron|evan|nathan|oliver|thomas|tom|lee|eddy|grandpa)\b|yunxi|yunjian|yunyang|yunfeng|yunhao|kangkang|zhiwei|zhiyu|david|mark|alex|daniel|fred|george|guy|ryan|andrew|brian/i.test(name)) return 'MALE';
   return 'UNKNOWN';
 }
 export function voiceLanguageMatches(voice: Pick<SpeechSynthesisVoice, 'lang'>, lang: TtsLanguage): boolean {
@@ -19,10 +19,10 @@ export function voiceLanguageMatches(voice: Pick<SpeechSynthesisVoice, 'lang'>, 
 }
 export function availableVoiceOptions(lang: TtsLanguage): CuratedVoiceItem[] {
   const auto = (female: boolean): CuratedVoiceItem => ({voiceURI:female?AUTO_FEMALE:AUTO_MALE,
-    name:female?'自动匹配女声':'自动匹配男声',description:'根据当前设备音色匹配',nativeLanguage:'',
+    name:female?'自动匹配女声':'自动匹配男声',description:browserVoices().some(v=>voiceLanguageMatches(v,lang)&&voiceGender(`${v.name} ${v.voiceURI}`)===(female?'FEMALE':'MALE'))?'根据当前设备音色匹配':'当前未检测到对应性别，使用可用声音',nativeLanguage:'',
     lang:lang==='CN'?'zh-CN':'en-US',engine:'browser',isFemale:female,gender:female?'FEMALE':'MALE'});
   return [auto(true),auto(false),...browserVoices().filter(v=>voiceLanguageMatches(v,lang)).map(v=>{
-    const gender=voiceGender(v.name);return {voiceURI:v.voiceURI,name:v.name,lang:v.lang,engine:'browser' as const,
+    const gender=voiceGender(`${v.name} ${v.voiceURI}`);return {voiceURI:v.voiceURI,name:v.name,lang:v.lang,engine:'browser' as const,
       nativeLanguage:v.lang,isFemale:gender==='FEMALE',gender,
       description:`${v.lang} · ${gender==='UNKNOWN'?'性别未标注':gender==='FEMALE'?'推测女声':'推测男声'} · ${v.localService?'设备声音':'浏览器联网声音'}`};
   })];
@@ -36,7 +36,7 @@ export function chooseBrowserVoice(profile: VoiceProfileConfig, role: 'ATC'|'PIL
   if(explicit) return explicit;
   const gender=profile.voiceURI===AUTO_FEMALE?'FEMALE':profile.voiceURI===AUTO_MALE?'MALE':role==='ATC'?'FEMALE':'MALE';
   const matching=all.filter(v=>voiceLanguageMatches(v,lang));
-  const score=(v:SpeechSynthesisVoice)=> (voiceGender(v.name)===gender?100:voiceGender(v.name)==='UNKNOWN'?10:-100)
+  const score=(v:SpeechSynthesisVoice)=> (voiceGender(`${v.name} ${v.voiceURI}`)===gender?100:voiceGender(`${v.name} ${v.voiceURI}`)==='UNKNOWN'?10:-100)
     +(v.localService?5:0)+(v.default?1:0)+(/zh[-_]CN|en[-_]US/i.test(v.lang)?3:0);
   return matching.sort((a,b)=>score(b)-score(a))[0];
 }

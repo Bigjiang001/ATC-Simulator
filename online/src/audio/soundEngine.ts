@@ -36,7 +36,6 @@ class AtcSoundEngine {
 
   private recognitionSession: any = null;
   private finishBrowserSpeech: (() => void) | null = null;
-  private voiceChoices = new Map<string, SpeechSynthesisVoice>();
   private aiStatus: AiVoiceEngineStatus = {
     connected: false, senseVoiceLoaded: false, kokoroLoaded: false, qwenLoaded: false,
     lastTtsError: '', device: 'Browser speech', cachedUtterancesCount: 0,
@@ -428,11 +427,8 @@ class AtcSoundEngine {
       synth.addEventListener('voiceschanged',changed);timer=setTimeout(finish,1500);
     });
     if(generation!==this.speechGenerationId || this.muted)return;
-    const key=`${lang}:${role}:${profile.voiceURI}`;
-    let voice=this.voiceChoices.get(key);
-    if(!voice || !browserVoices().some(v=>v.voiceURI===voice!.voiceURI)){
-      voice=chooseBrowserVoice(profile,role,lang);if(voice)this.voiceChoices.set(key,voice);
-    }
+    // Re-evaluate: Safari may expose installed voices after the first utterance.
+    const voice=chooseBrowserVoice(profile,role,lang);
     if(!voice){this.aiStatus.lastTtsError='未找到当前语言的声音，请检查系统语音设置；通话文字已保留';return;}
     this.lastSpokenPhoneticPreview=formatKokoroAviationPhonetics(rawText,lang);
     await new Promise<void>(resolve=>{

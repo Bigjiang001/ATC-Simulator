@@ -102,6 +102,13 @@ export const GameModals: React.FC = () => {
         {!available && <option value={profile.voiceURI}>已保存音色暂不可用</option>}
         {curatedVoices.map(v => <option key={v.voiceURI} value={v.voiceURI}>{v.name} — {v.description}</option>)}
       </select>
+      {role === 'PILOT' && !curatedVoices.some(v => !v.voiceURI.startsWith('browser:') && v.gender === 'MALE') && (
+        <div className="voice-description" role="status" data-testid="missing-male-voice">
+          {store.uiLanguage === 'EN'
+            ? 'Safari has not provided a male voice for this language. In iPad Settings → Accessibility → Read & Speak (or Spoken Content) → Voices, download a male voice, then return and refresh the voices. Availability depends on Safari.'
+            : 'Safari 尚未提供当前语言的男声。可在 iPad 设置 → 辅助功能 → 朗读与语音（或朗读内容）→ 声音，下载男声后返回刷新音色；实际可用音色以 Safari 提供的列表为准。'}
+        </div>
+      )}
       <div className="voice-description">{role === 'ATC' ? '默认优先匹配女声' : '默认优先匹配男声'} · 可试听后自行选择</div>
       <div className="voice-rate-header"><label htmlFor={`${slug}-voice-rate`}>播报语速</label>
         <output data-testid={`${slug}-voice-rate-value`}>{profile.rate.toFixed(2)}×</output>
@@ -540,6 +547,8 @@ export const GameModals: React.FC = () => {
                   {voiceRoleSettings('ATC')}
                   {voiceRoleSettings('PILOT')}
                 </div>
+                <button type="button" className="btn-voice-preview" data-testid="btn-refresh-voices"
+                  onClick={() => setVoicesTick(n => n + 1)}>{store.uiLanguage === 'EN' ? 'Refresh voices' : '刷新系统音色'}</button>
                 <div className="voice-catalog-note">
                   声音由当前浏览器和系统提供，无需下载游戏模型。性别根据音色名称推测，以试听为准。
                   音色和语速按中英文分别保存。浏览器播报无法应用游戏的电台滤波，仍保留通话提示音与可调底噪。

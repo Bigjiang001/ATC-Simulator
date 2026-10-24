@@ -1,5 +1,17 @@
 // Display translations only. Simulation data, radio logs and speech input stay in their original language.
 export const EN_UI: Record<string, string> = {
+  '当前未检测到对应性别': 'Requested voice gender not detected',
+  '使用可用声音': 'using an available voice',
+  '尚未提供当前语言的男声': 'has not provided a male voice for this language',
+  '辅助功能': 'Accessibility',
+  '朗读与语音': 'Read & Speak',
+  '或朗读内容': 'or Spoken Content',
+  '声音': 'Voices',
+  '下载男声后返回刷新音色': 'download a male voice, then return and refresh voices',
+  '实际可用音色以': 'Available voices depend on',
+  '提供的列表为准': 'the provided list',
+  '刷新系统音色': 'Refresh voices',
+
   "可在此切换": "Toggle this setting here",
   "浏览器语音识别暂不可用": "Browser speech recognition is unavailable",
   "请使用文字输入或按钮": "use text input or command buttons",

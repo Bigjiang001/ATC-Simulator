@@ -285,32 +285,86 @@ export const RadarScopeCanvas: React.FC = () => {
     endPointerInteraction(e.clientX, e.clientY, e.shiftKey);
   };
 
-  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length === 1) {
-      beginPointerInteraction(e.touches[0].clientX, e.touches[0].clientY);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    if (e.touches.length === 1) {
-      updatePointerInteraction(e.touches[0].clientX, e.touches[0].clientY);
-    }
-  };
-
-  const handleTouchEnd = (e: React.TouchEvent<HTMLCanvasElement>) => {
-    const touch = e.changedTouches[0];
-    if (touch) {
-      endPointerInteraction(touch.clientX, touch.clientY, false);
-    }
-  };
-
-  const handleWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
-    e.preventDefault();
-    const state = useGameStore.getState();
-    const factor = e.deltaY < 0 ? 1.12 : 0.89;
-    const nextZoom = Math.max(0.55, Math.min(2.8, Number((state.viewport.zoom * factor).toFixed(2))));
-    state.updateViewport({ zoom: nextZoom });
-  };
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    let pinching = false;
+    let pinch: { distance: number; zoom: number; world: { x: number; y: number } } | null = null;
+    const cancelDrag = () => {
+      dragStateRef.current.mode = 'NONE';
+      dragVectorRef.current = null;
+    };
+    const point = (x: number, y: number) => {
+      const rect = canvas.getBoundingClientRect();
+      return { x: (x - rect.left) * canvas.width / rect.width,
+        y: (y - rect.top) * canvas.height / rect.height };
+    };
+    const start = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+      if (e.touches.length >= 2) {
+        cancelDrag();
+        pinching = true;
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const mid = point((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+        const vp = useGameStore.getState().viewport;
+        pinch = { distance: Math.max(1, Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY)),
+          zoom: vp.zoom, world: screenToWorld(mid.x, mid.y, canvas.width, canvas.height, vp) };
+      } else if (!pinching && e.touches.length === 1) {
+        beginPointerInteraction(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+    const move = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+      if (pinch && e.touches.length >= 2) {
+        const [a, b] = [e.touches[0], e.touches[1]];
+        const mid = point((a.clientX + b.clientX) / 2, (a.clientY + b.clientY) / 2);
+        const zoom = Math.max(0.55, Math.min(2.8, pinch.zoom *
+          Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) / pinch.distance));
+        const scale = Math.min(canvas.width, canvas.height) / 60 * zoom;
+        useGameStore.getState().updateViewport({ zoom,
+          panX: (mid.x - canvas.width / 2) / scale - pinch.world.x,
+          panY: (canvas.height / 2 - mid.y) / scale - pinch.world.y });
+      } else if (!pinching && e.touches.length === 1) {
+        updatePointerInteraction(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    };
+    const end = (e: TouchEvent) => {
+      if (e.cancelable) e.preventDefault();
+      if (!pinching && e.changedTouches[0]) {
+        endPointerInteraction(e.changedTouches[0].clientX, e.changedTouches[0].clientY, false);
+      }
+      // After a pinch, require all fingers to lift before allowing aircraft commands.
+      if (pinching) cancelDrag();
+      pinch = null;
+      if (pinching && e.touches.length >= 2) start(e);
+      if (!e.touches.length) pinching = false;
+    };
+    const cancel = () => { cancelDrag(); pinch = null; pinching = false; };
+    const wheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const state = useGameStore.getState();
+      state.updateViewport({ zoom: Math.max(0.55, Math.min(2.8,
+        state.viewport.zoom * (e.deltaY < 0 ? 1.12 : 0.89))) });
+    };
+    const gesture = (e: Event) => { if (e.cancelable) e.preventDefault(); };
+    // Native non-passive listeners let Safari reserve gestures for this canvas only.
+    canvas.addEventListener('touchstart', start, { passive: false });
+    canvas.addEventListener('touchmove', move, { passive: false });
+    canvas.addEventListener('touchend', end, { passive: false });
+    canvas.addEventListener('touchcancel', cancel);
+    canvas.addEventListener('wheel', wheel, { passive: false });
+    canvas.addEventListener('gesturestart', gesture, { passive: false });
+    canvas.addEventListener('gesturechange', gesture, { passive: false });
+    return () => {
+      canvas.removeEventListener('touchstart', start);
+      canvas.removeEventListener('touchmove', move);
+      canvas.removeEventListener('touchend', end);
+      canvas.removeEventListener('touchcancel', cancel);
+      canvas.removeEventListener('wheel', wheel);
+      canvas.removeEventListener('gesturestart', gesture);
+      canvas.removeEventListener('gesturechange', gesture);
+    };
+  }, []);
 
   const vp = store.viewport;
   const selectedAc = store.aircraft.find((a) => a.id === store.selectedAircraftId);
@@ -458,10 +512,6 @@ export const RadarScopeCanvas: React.FC = () => {
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        onWheel={handleWheel}
       />
 
       {/* 左上角缩放与 J-Ring 安全间隔环按钮 */}
