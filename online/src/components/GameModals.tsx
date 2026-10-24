@@ -33,7 +33,8 @@ export const GameModals: React.FC = () => {
     void soundEngine.checkLocalAiEngineHealth().then(() => setVoicesTick((n) => n + 1));
     const update = () => setVoicesTick(n => n + 1);
     window.speechSynthesis?.addEventListener('voiceschanged', update);
-    return () => window.speechSynthesis?.removeEventListener('voiceschanged', update);
+    window.addEventListener('atc-voice-status', update);
+    return () => { window.speechSynthesis?.removeEventListener('voiceschanged', update); window.removeEventListener('atc-voice-status', update); };
   }, [store.showSettingsModal]);
   const curatedVoices = soundEngine.getAvailableVoices(s.ttsLanguage);
   const aiStatus = soundEngine.getAiEngineStatus();
@@ -96,20 +97,13 @@ export const GameModals: React.FC = () => {
           onClick={() => store.updateSettings(role === 'ATC' ? {atcTtsEnabled: !enabled} : {pilotTtsEnabled: !enabled})}>
           {enabled ? '🔊 开启语音' : '🔇 仅文字'}</button>
       </div>
-      <label htmlFor={`${slug}-voice-select`}>浏览器音色</label>
+      <label htmlFor={`${slug}-voice-select`}>播报音色</label>
       <select id={`${slug}-voice-select`} value={profile.voiceURI} data-testid={`select-${slug}-voice-uri`}
         onChange={e => update({voiceURI:e.target.value})} className="voice-dropdown">
         {!available && <option value={profile.voiceURI}>已保存音色暂不可用</option>}
         {curatedVoices.map(v => <option key={v.voiceURI} value={v.voiceURI}>{v.name} — {v.description}</option>)}
       </select>
-      {role === 'PILOT' && !curatedVoices.some(v => !v.voiceURI.startsWith('browser:') && v.gender === 'MALE') && (
-        <div className="voice-description" role="status" data-testid="missing-male-voice">
-          {store.uiLanguage === 'EN'
-            ? 'Safari has not provided a male voice for this language. In iPad Settings → Accessibility → Read & Speak (or Spoken Content) → Voices, download a male voice, then return and refresh the voices. Availability depends on Safari.'
-            : 'Safari 尚未提供当前语言的男声。可在 iPad 设置 → 辅助功能 → 朗读与语音（或朗读内容）→ 声音，下载男声后返回刷新音色；实际可用音色以 Safari 提供的列表为准。'}
-        </div>
-      )}
-      <div className="voice-description">{role === 'ATC' ? '默认优先匹配女声' : '默认优先匹配男声'} · 可试听后自行选择</div>
+      <div className="voice-description">{role === 'ATC' ? '默认优先匹配女声' : '系统无男声时自动使用内置男声'} · 可试听后自行选择</div>
       <div className="voice-rate-header"><label htmlFor={`${slug}-voice-rate`}>播报语速</label>
         <output data-testid={`${slug}-voice-rate-value`}>{profile.rate.toFixed(2)}×</output>
         <button type="button" className="btn-voice-preview" onClick={()=>update({rate:recommendedSpeechRate(s.ttsLanguage)})}>恢复推荐</button>
@@ -484,10 +478,11 @@ export const GameModals: React.FC = () => {
                   <div>推荐使用最新版 Chrome；其他浏览器以实际支持情况为准。</div>
                   <div>{soundEngine.getBrowserSpeechCapabilities().recognition ? '当前浏览器提供语音识别接口' : '当前浏览器不支持语音识别，请使用文字输入或按钮'}</div>
                   <div>语音识别可能由浏览器厂商联网处理，音频可能发送至其服务；按住 Shift 即开始识别。</div>
-                  <div>没有匹配的男声或女声时使用当前语言可用音色；可在下方手动选择。</div>
+                  <div>内置三种合成男声，不依赖系统音色；可在下方选择并试听。</div>
+                  {soundEngine.getBuiltinSpeechStatus() && <div role="status">{soundEngine.getBuiltinSpeechStatus()}</div>}
                   {aiStatus.lastTtsError && <div role="status">{aiStatus.lastTtsError}</div>}
                 </div>
-                <div className="setting-two-col">
+                <div className="setting-two-col voice-control-grid">
                   <div className="setting-row-block">
                     <span className="setting-label">
                       1. 🎙️ 按住 Shift 键麦克风语音指挥模式（开启后按住 Shift 说话识别，仅播报飞行员复诵）：
@@ -543,14 +538,14 @@ export const GameModals: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="setting-two-col">
+                <div className="setting-two-col voice-roles-grid">
                   {voiceRoleSettings('ATC')}
                   {voiceRoleSettings('PILOT')}
                 </div>
                 <button type="button" className="btn-voice-preview" data-testid="btn-refresh-voices"
                   onClick={() => setVoicesTick(n => n + 1)}>{store.uiLanguage === 'EN' ? 'Refresh voices' : '刷新系统音色'}</button>
                 <div className="voice-catalog-note">
-                  声音由当前浏览器和系统提供，无需下载游戏模型。性别根据音色名称推测，以试听为准。
+                  内置男声首次播放需加载约 3 MB 音色资源，带有电子合成音质；系统音色仍可选择。
                   音色和语速按中英文分别保存。浏览器播报无法应用游戏的电台滤波，仍保留通话提示音与可调底噪。
                 </div>
 

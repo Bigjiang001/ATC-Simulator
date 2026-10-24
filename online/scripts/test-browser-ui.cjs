@@ -52,15 +52,13 @@ function mockSpeech(){
  await page.reload();await page.getByTestId('btn-start-playing').click();await page.getByTestId('btn-settings').click();assert.equal(await page.getByTestId('select-pilot-voice-uri').inputValue(),'ting');
  results.push('CN/EN voice roles, manual selection, settings translation and reload persistence');
  await page.evaluate(()=>{window.__voices=window.__voices.filter(v=>v.voiceURI==='ting');window.__voicesChanged();});
- await page.getByTestId('missing-male-voice').waitFor();
+ assert.equal(await page.getByTestId('select-pilot-voice-uri').locator('option[value^="builtin:male:"]').count(),3);
  await page.evaluate(()=>{window.__voices.push({name:'Li-mu',voiceURI:'apple-li',lang:'zh-CN',localService:true});});
  await page.getByTestId('btn-refresh-voices').click();
- await page.waitForFunction(()=>!document.querySelector('[data-testid="missing-male-voice"]'));
  await page.getByTestId('select-pilot-voice-uri').selectOption('browser:auto:male');
  await page.getByTestId('btn-preview-pilot-voice').click();await page.waitForTimeout(30);
  assert.equal(await page.evaluate(()=>window.__spoken.at(-1).voice),'apple-li');
- results.push('Safari missing-male guidance, manual voice refresh and Apple male preview');
-
+ results.push('Three bundled male choices remain available with female-only Safari voices');
  await page.getByTestId('btn-close-settings').click();await page.getByTestId('btn-open-lobby').click();await page.getByTestId('lobby-mode-tutorial').click();await page.getByTestId('btn-start-playing').click();assert.equal(await page.evaluate(()=>window.__testRequire('game/store').useGameStore.getState().tutorial.active),true);
  results.push('Tutorial entry preserved');
  const unsupported=await browser.newContext();await unsupported.addInitScript(()=>{window.webkitSpeechRecognition=undefined;window.SpeechRecognition=undefined;});const no=await unsupported.newPage();await no.goto('http://127.0.0.1:18830/ATC-Simulator/');assert((await no.getByTestId('online-browser-notice').innerText()).includes('不支持语音识别'));await no.getByTestId('btn-start-playing').click();await no.keyboard.down('Shift');await no.keyboard.up('Shift');await no.waitForTimeout(20);assert.equal(await no.evaluate(()=>window.__testRequire('game/store').useGameStore.getState().voicePtt.isListening),false);await unsupported.close();

@@ -6,10 +6,11 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-standalone.cjs",
-    "test": "node scripts/run-unit-tests.cjs && node scripts/test-gameplay.cjs && node scripts/test-ui-language.cjs && node scripts/test-browser-speech.cjs",
+    "test": "node scripts/run-unit-tests.cjs && node scripts/test-gameplay.cjs && node scripts/test-ui-language.cjs && node scripts/test-browser-speech.cjs && node scripts/test-builtin-engine.mjs",
     "test:ui": "node scripts/test-browser-ui.cjs",
     "typecheck": "tsc --noEmit",
-    "test:ipad": "node scripts/build-standalone.cjs && node scripts/test-ipad-touch.cjs"
+    "test:ipad": "node scripts/build-standalone.cjs && node scripts/test-ipad-touch.cjs",
+    "test:voices": "node scripts/build-standalone.cjs && node scripts/test-builtin-voices.cjs"
   },
   "dependencies": {
     "react": "^18.3.1",

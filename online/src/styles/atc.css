@@ -1541,3 +1541,17 @@ html[lang="en"] .cmd-block-label {
 .voice-preview-actions > button { flex:1; min-height:34px; }
 .voice-catalog-note { color:#93aeb7; font-size:11px; line-height:1.9; margin:12px 0 17px; padding:11px 14px; border-left:2px solid #3f907c; background:#0b202b; }
 @media(max-width:700px) { .voice-role-header { flex-wrap:wrap; } .voice-rate-scale { font-size:9px; } }
+
+/* Keep Safari selects and both role cards aligned instead of flex-stretching. */
+.voice-roles-grid { align-items: stretch; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.voice-role-box { display: grid; grid-template-rows: 38px auto 38px minmax(54px, auto) auto 30px 34px; gap: 8px; align-content: start; }
+.voice-role-header { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px; flex-wrap: nowrap; }
+.voice-role-header > strong { white-space: nowrap; }
+.voice-role-header > button { min-width: 0; min-height: 34px; }
+.voice-role-box > .voice-dropdown { flex: none; height: 38px; min-height: 38px; max-height: 38px; margin: 0; }
+.voice-role-box > .voice-description { margin: 0; padding: 9px 10px; min-width: 0; }
+.voice-role-box > .voice-rate-slider { margin: 0; min-height: 30px; }
+.voice-role-box > .btn-voice-preview { min-height: 34px; }
+.voice-control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.voice-control-grid > .setting-row-block { display: grid; grid-template-rows: minmax(38px, auto) auto; align-content: start; }
+@media (max-width: 760px) { .voice-roles-grid, .voice-control-grid { grid-template-columns: minmax(0, 1fr); } }

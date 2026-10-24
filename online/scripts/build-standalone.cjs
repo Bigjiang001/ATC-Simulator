@@ -16,6 +16,7 @@ const OUTPUT_HTML_PATH = path.resolve(ROOT_DIR, 'index.html');
 const DIST_HTML_PATH = path.resolve(ROOT_DIR, 'dist/index.html');
 
 const MODULE_FILES = [
+  { id: 'audio/builtinSpeech', file: 'src/audio/builtinSpeech.ts' },
   { id: 'atc/voiceGuidance', file: 'src/atc/voiceGuidance.ts' },
   { id: 'components/VoiceAssistPanel', file: 'src/components/VoiceAssistPanel.tsx' },
   { id: 'components/MissionPanel', file: 'src/components/MissionPanel.tsx' },

@@ -1,7 +1,7 @@
 import { TtsLanguage, VoiceProfileConfig } from '../aircraft/types';
 export interface CuratedVoiceItem {
   voiceURI: string; name: string; description: string; nativeLanguage: string; lang: string;
-  engine: 'browser'; isFemale: boolean; gender?: 'FEMALE' | 'MALE' | 'UNKNOWN';
+  engine: 'browser' | 'builtin'; isFemale: boolean; gender?: 'FEMALE' | 'MALE' | 'UNKNOWN';
 }
 export const AUTO_FEMALE = 'browser:auto:female';
 export const AUTO_MALE = 'browser:auto:male';
@@ -17,14 +17,31 @@ export function voiceLanguageMatches(voice: Pick<SpeechSynthesisVoice, 'lang'>, 
   const code = voice.lang.toLowerCase().replace(/_/g, '-');
   return lang === 'EN' ? code.startsWith('en') : /^(zh($|-cn|-sg|-tw)|cmn)/.test(code);
 }
+export function hasSystemMale(lang: TtsLanguage): boolean {
+  return browserVoices().some(v => voiceLanguageMatches(v, lang) && voiceGender(`${v.name} ${v.voiceURI}`) === 'MALE');
+}
+export function builtinVariant(profile: VoiceProfileConfig, role: 'ATC' | 'PILOT', lang: TtsLanguage): string | null {
+  const explicit = /^builtin:male:([123])$/.exec(profile.voiceURI || '');
+  if (explicit) return `m${explicit[1]}`;
+  const autoMale = profile.voiceURI === AUTO_MALE || (!profile.voiceURI && role === 'PILOT');
+  return autoMale && !hasSystemMale(lang) ? 'm1' : null;
+}
 export function availableVoiceOptions(lang: TtsLanguage): CuratedVoiceItem[] {
-  const auto = (female: boolean): CuratedVoiceItem => ({voiceURI:female?AUTO_FEMALE:AUTO_MALE,
-    name:female?'自动匹配女声':'自动匹配男声',description:browserVoices().some(v=>voiceLanguageMatches(v,lang)&&voiceGender(`${v.name} ${v.voiceURI}`)===(female?'FEMALE':'MALE'))?'根据当前设备音色匹配':'当前未检测到对应性别，使用可用声音',nativeLanguage:'',
-    lang:lang==='CN'?'zh-CN':'en-US',engine:'browser',isFemale:female,gender:female?'FEMALE':'MALE'});
-  return [auto(true),auto(false),...browserVoices().filter(v=>voiceLanguageMatches(v,lang)).map(v=>{
-    const gender=voiceGender(`${v.name} ${v.voiceURI}`);return {voiceURI:v.voiceURI,name:v.name,lang:v.lang,engine:'browser' as const,
-      nativeLanguage:v.lang,isFemale:gender==='FEMALE',gender,
-      description:`${v.lang} · ${gender==='UNKNOWN'?'性别未标注':gender==='FEMALE'?'推测女声':'推测男声'} · ${v.localService?'设备声音':'浏览器联网声音'}`};
+  const auto = (female: boolean): CuratedVoiceItem => ({ voiceURI: female ? AUTO_FEMALE : AUTO_MALE,
+    name: female ? '自动匹配女声' : '自动匹配男声',
+    description: !female && !hasSystemMale(lang) ? '使用内置合成男声' : '根据当前设备音色匹配', nativeLanguage: '',
+    lang: lang === 'CN' ? 'zh-CN' : 'en-US', engine: 'browser', isFemale: female, gender: female ? 'FEMALE' : 'MALE' });
+  const builtins: CuratedVoiceItem[] = [1, 2, 3].map(n => ({ voiceURI: `builtin:male:${n}`,
+    name: `内置男声 ${n}`, description: '合成男声 · 无需系统男声', nativeLanguage: '',
+    lang: lang === 'CN' ? 'zh-CN' : 'en-US', engine: 'builtin', isFemale: false, gender: 'MALE' }));
+  // Safari can list compact/enhanced duplicates under the same URI; keep one option.
+  const unique = new Map<string, SpeechSynthesisVoice>();
+  for (const v of browserVoices()) if (voiceLanguageMatches(v, lang)) unique.set(v.voiceURI, v);
+  return [auto(true), auto(false), ...builtins, ...Array.from(unique.values()).map(v => {
+    const gender = voiceGender(`${v.name} ${v.voiceURI}`);
+    return { voiceURI: v.voiceURI, name: v.name, lang: v.lang, engine: 'browser' as const,
+      nativeLanguage: v.lang, isFemale: gender === 'FEMALE', gender,
+      description: `${v.lang} · ${gender === 'UNKNOWN' ? '性别未标注' : gender === 'FEMALE' ? '推测女声' : '推测男声'}` };
   })];
 }
 export function getVoiceOption(id: string): CuratedVoiceItem | undefined {
@@ -42,7 +59,7 @@ export function chooseBrowserVoice(profile: VoiceProfileConfig, role: 'ATC'|'PIL
 }
 export function recommendedSpeechRate(lang:TtsLanguage):number { return lang==='CN'?1.15:1.05; }
 export function resolveVoiceIdForLanguage(profile:VoiceProfileConfig,role:'ATC'|'PILOT',_lang:TtsLanguage):string {
-  return profile.voiceURI?.startsWith('browser:') || browserVoices().some(v=>v.voiceURI===profile.voiceURI)
+  return /^builtin:male:[123]$/.test(profile.voiceURI || '') || profile.voiceURI?.startsWith('browser:') || browserVoices().some(v=>v.voiceURI===profile.voiceURI)
     ?profile.voiceURI:role==='ATC'?AUTO_FEMALE:AUTO_MALE;
 }
 export function normalizeVoiceProfile(current:VoiceProfileConfig,patch:Partial<VoiceProfileConfig>|undefined,

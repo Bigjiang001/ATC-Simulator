@@ -8,3 +8,8 @@ for(const match of html.matchAll(/(?:src|href)="([^"]+)"/g)){
 assert.equal(fs.readFileSync(path.join(root,'website/game/index.html'),'utf8'),fs.readFileSync(path.join(root,'online/index.html'),'utf8'));
 const audio=fs.readFileSync(path.join(root,'online/src/audio/soundEngine.ts'),'utf8');assert(!/fetch\s*\(|127\.0\.0\.1/.test(audio));
 console.log('PASS: website links, approved browser game, no checklist/platform download links or model fetches');
+
+for (const file of ['worker.js', 'vendor/espeak-ng.js', 'vendor/espeak-ng.data', 'vendor/COPYING', 'vendor/NOTICE.md']) {
+  assert(fs.existsSync(path.join(root, 'dist/game/voices', file)), `Missing deployed voice resource: ${file}`);
+}
+console.log('PASS: built-in male worker, engine, dictionaries and third-party notices are deployed with the game');

@@ -1,3 +1,4 @@
+import { synthesizeBuiltin, cancelBuiltinSpeech } from './builtinSpeech';
 import {
   AiVoiceEngineStatus,
   AtcSoundEvent,
@@ -10,7 +11,7 @@ import { formatKokoroAviationPhonetics } from '../atc/voiceRecognizer';
 
 export { formatKokoroAviationPhonetics };
 
-import { availableVoiceOptions, CuratedVoiceItem, chooseBrowserVoice, browserVoices, recommendedSpeechRate } from './voiceCatalog';
+import { availableVoiceOptions, CuratedVoiceItem, chooseBrowserVoice, browserVoices, recommendedSpeechRate, builtinVariant } from './voiceCatalog';
 export { resolveVoiceIdForLanguage } from './voiceCatalog';
 const VHF_GAIN_MAP: Record<VhfStaticLevel, number> = { OFF: 0, LOW: 0.045, MEDIUM: 0.095, HIGH: 0.165 };
 
@@ -41,9 +42,15 @@ class AtcSoundEngine {
     lastTtsError: '', device: 'Browser speech', cachedUtterancesCount: 0,
     lastLatencyMs: 0, endpointUrl: '',
   };
+  private builtinStatus = '';
+  public getBuiltinSpeechStatus(): string { return this.builtinStatus; }
+  private updateBuiltinStatus(message: string): void {
+    this.builtinStatus = message;
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('atc-voice-status'));
+  }
   public getBrowserSpeechCapabilities() {
     const scope = typeof window === 'undefined' ? {} : window as any;
-    return { synthesis: Boolean(scope.speechSynthesis),
+    return { synthesis: Boolean(scope.speechSynthesis || (scope.Worker && (scope.AudioContext || scope.webkitAudioContext))),
       recognition: Boolean(scope.SpeechRecognition || scope.webkitSpeechRecognition),
       secure: Boolean(scope.isSecureContext), voices: browserVoices().length };
   }
@@ -83,6 +90,8 @@ class AtcSoundEngine {
 
   public stopAllSpeech(): void {
     this.speechGenerationId += 1;
+    cancelBuiltinSpeech();
+    this.updateBuiltinStatus('');
     this.stopContinuousVhfStatic();
     if (this.activeBufferSource) {
       try {
@@ -415,9 +424,44 @@ class AtcSoundEngine {
     void this.playViaBrowserSpeech(sampleText, settings.ttsLanguage, profile, role, vhfLevel, dryPlayback);
   }
 
-  /** Browser synthesis uses one pinned voice per role, language and selection. */
+  private async playBuiltinSpeech(rawText: string, lang: 'CN' | 'EN', profile: VoiceProfileConfig,
+    role: 'ATC' | 'PILOT', variant: string, level: VhfStaticLevel, dry: boolean): Promise<void> {
+    const generation = this.speechGenerationId;
+    const ctx = this.ensureContext();
+    if (!ctx) { this.aiStatus.lastTtsError = '无法启动内置男声，请点击试听重试'; this.updateBuiltinStatus(''); return; }
+    this.lastSpokenPhoneticPreview = formatKokoroAviationPhonetics(rawText, lang);
+    this.aiStatus.lastTtsError = '';
+    this.updateBuiltinStatus('正在加载或合成内置男声…');
+    try {
+      const audio = await synthesizeBuiltin(this.lastSpokenPhoneticPreview, lang, variant, Number.isFinite(profile.rate) ? profile.rate : recommendedSpeechRate(lang));
+      if (generation !== this.speechGenerationId || this.muted) return;
+      this.updateBuiltinStatus('');
+      const buffer = ctx.createBuffer(1, audio.samples.length, audio.sampleRate);
+      buffer.getChannelData(0).set(audio.samples);
+      await new Promise<void>(resolve => {
+        const source = ctx.createBufferSource(); source.buffer = buffer; source.connect(ctx.destination);
+        this.activeBufferSource = source;
+        let done = false;
+        const finish = () => { if (done) return; done = true; source.disconnect();
+          if (this.activeBufferSource === source) this.activeBufferSource = null;
+          if (this.finishBrowserSpeech === finish) this.finishBrowserSpeech = null;
+          this.stopContinuousVhfStatic(role, dry ? 'OFF' : level); resolve(); };
+        source.onended = finish; this.finishBrowserSpeech = finish;
+        try {
+          source.start(); this.aiStatus.lastTtsError = '';
+          if (!dry && level !== 'OFF') { this.playVhfSquelchBurst('START', role, level); this.startContinuousVhfStatic(role, level, buffer.duration + 1); }
+        } catch { finish(); throw new Error('Audio playback failed'); }
+      });
+    } catch (error) {
+      if (generation === this.speechGenerationId) { this.aiStatus.lastTtsError = '内置男声加载或播放失败，请检查网络后点击试听重试；通话文字已保留'; this.updateBuiltinStatus(''); }
+    }
+  }
+
+  /** Use the bundled male engine when Safari provides no male voice. */
   private async playViaBrowserSpeech(rawText:string,lang:'CN'|'EN',profile:VoiceProfileConfig,role:'ATC'|'PILOT',level:VhfStaticLevel='MEDIUM',dry=false):Promise<void> {
     if(!rawText || typeof window==='undefined') return;
+    const variant = builtinVariant(profile, role, lang);
+    if (variant) return this.playBuiltinSpeech(rawText, lang, profile, role, variant, level, dry);
     const synth=window.speechSynthesis,generation=this.speechGenerationId;
     if(!synth || !window.SpeechSynthesisUtterance){this.aiStatus.lastTtsError='浏览器不支持语音播报，通话文字已保留';return;}
     if(!browserVoices().length) await new Promise<void>(resolve=>{

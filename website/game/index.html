@@ -1549,7 +1549,223 @@ html[lang="en"] .cmd-block-label {
 .voice-catalog-note { color:#93aeb7; font-size:11px; line-height:1.9; margin:12px 0 17px; padding:11px 14px; border-left:2px solid #3f907c; background:#0b202b; }
 @media(max-width:700px) { .voice-role-header { flex-wrap:wrap; } .voice-rate-scale { font-size:9px; } }
 
+/* Keep Safari selects and both role cards aligned instead of flex-stretching. */
+.voice-roles-grid { align-items: stretch; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.voice-role-box { display: grid; grid-template-rows: 38px auto 38px minmax(54px, auto) auto 30px 34px; gap: 8px; align-content: start; }
+.voice-role-header { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px; flex-wrap: nowrap; }
+.voice-role-header > strong { white-space: nowrap; }
+.voice-role-header > button { min-width: 0; min-height: 34px; }
+.voice-role-box > .voice-dropdown { flex: none; height: 38px; min-height: 38px; max-height: 38px; margin: 0; }
+.voice-role-box > .voice-description { margin: 0; padding: 9px 10px; min-width: 0; }
+.voice-role-box > .voice-rate-slider { margin: 0; min-height: 30px; }
+.voice-role-box > .btn-voice-preview { min-height: 34px; }
+.voice-control-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.voice-control-grid > .setting-row-block { display: grid; grid-template-rows: minmax(38px, auto) auto; align-content: start; }
+@media (max-width: 760px) { .voice-roles-grid, .voice-control-grid { grid-template-columns: minmax(0, 1fr); } }
+
   </style>
+<meta name="atc-page" content="game">
+<script>window.ATC_ANALYTICS_CONFIG={"enabled":true,"ga4MeasurementId":"G-ZY4BYQD11Q","firebase":{"apiKey":"AIzaSyDFxERHDMTJ1dCl3bcLdk7cCxLnuiaS80M","authDomain":"project-5127246643163647096.firebaseapp.com","projectId":"project-5127246643163647096","messagingSenderId":"461062640908","appId":"1:461062640908:web:64a919302ad7f9e000e529","databaseURL":"https://project-5127246643163647096-default-rtdb.asia-southeast1.firebasedatabase.app"},"functionsRegion":"asia-southeast1","appCheckSiteKey":"","dashboardMode":"local"};</script>
+<script>/* Shared by the browser and Node tests. All times are real milliseconds, never simulation time. */
+(function (root) {
+  'use strict';
+  const DAY = 86400000, OFFSET = 28800000, IDLE = 300000, LEASE = 90000;
+  const dayKey = now => String(now - ((now + OFFSET) % DAY));
+  class Tracker {
+    constructor(kind, now, emit = () => {}) {
+      this.kind = kind; this.emit = emit; this.records = {}; this.round = false;
+      this.status = 'BRIEFING'; this.paused = true; this.visible = true;
+      this.connected = false; this.lastInput = now; this.lastWall = now;
+      this.roundMs = 0; this.generation = -1; this.previousActive = false;
+      this.record(now).views = 1;
+    }
+    record(now) {
+      const key = dayKey(now);
+      return this.records[key] ||= { views: 0, site: true, game: this.kind === 'game', player: false, starts: 0, ends: 0, activeMs: 0 };
+    }
+    active(now) {
+      return this.kind === 'game' && this.round && this.status === 'RUNNING' && !this.paused &&
+        this.visible && this.connected && now - this.lastInput < IDLE;
+    }
+    tick(now) {
+      const active = this.active(now);
+      // A suspended process must never backfill hours of imaginary play.
+      const elapsed = Math.max(0, Math.min(1500, now - this.lastWall));
+      if (this.previousActive && active && elapsed) {
+        let from = now - elapsed;
+        while (from < now) {
+          const until = Math.min(now, Number(dayKey(from)) + DAY);
+          const r = this.record(from); r.player = true; r.activeMs += until - from;
+          this.roundMs += until - from; from = until;
+        }
+      }
+      if (this.visible) this.record(now);
+      this.lastWall = now; this.previousActive = active;
+    }
+    environment(patch, now) {
+      this.tick(now); Object.assign(this, patch); this.previousActive = this.active(now);
+    }
+    input(now) { this.environment({ lastInput: now }, now); }
+    finish(reason, now) {
+      if (!this.round) return;
+      this.record(now).ends++; this.emit('game_end', { reason, active_seconds: Math.floor(this.roundMs / 1000) });
+      this.round = false; this.roundMs = 0;
+    }
+    game(state, now) {
+      this.tick(now);
+      if (this.generation !== -1 && state.generation !== this.generation) this.finish('restart', now);
+      this.generation = state.generation;
+      if (['BRIEFING', 'VICTORY', 'GAMEOVER'].includes(state.status)) this.finish(state.status.toLowerCase(), now);
+      this.status = state.status; this.paused = state.paused;
+      if (!this.round && this.status === 'RUNNING' && !this.paused) {
+        this.round = true; this.roundMs = 0; this.lastInput = now;
+        const r = this.record(now); r.starts++; r.player = true;
+        this.emit('game_start', { airport: state.airport, difficulty: state.difficulty });
+      }
+      this.previousActive = this.active(now);
+    }
+  }
+  root.ATCAnalyticsCore = { Tracker, dayKey, DAY, OFFSET, IDLE, LEASE };
+})(typeof globalThis === 'object' ? globalThis : window);
+</script>
+<script type="module">(async function () {
+  'use strict';
+  const config = window.ATC_ANALYTICS_CONFIG;
+  if (!config?.enabled || !/^https?:$/.test(location.protocol)) return;
+  const kind = document.querySelector('meta[name="atc-page"]')?.content || 'home';
+  if (kind === 'admin') return;
+  const { Tracker, dayKey, DAY } = window.ATCAnalyticsCore;
+  const clock = () => Date.now() + offset;
+  let offset = 0, stopped = false, flushing = false, connected = false, presenceReady = false, presencePublished = false, appCheckReady = false;
+  const tab = crypto.randomUUID(); // New for every document, including duplicated tabs.
+  const ga = (event, params = {}) => {
+    if (!/^G-[A-Z0-9]+$/.test(config.ga4MeasurementId || '')) return;
+    window.gtag('event', event, params);
+  };
+  if (/^G-[A-Z0-9]+$/.test(config.ga4MeasurementId || '')) {
+    window.dataLayer = window.dataLayer || [];
+    window.gtag = function () { window.dataLayer.push(arguments); };
+    window.gtag('js', new Date());
+    window.gtag('config', config.ga4MeasurementId, { send_page_view: false, allow_google_signals: false });
+    const script = document.createElement('script'); script.async = true;
+    script.src = 'https://www.googletagmanager.com/gtag/js?id=' + encodeURIComponent(config.ga4MeasurementId);
+    document.head.appendChild(script);
+    // Exclude query/hash, which may contain user-provided text.
+    ga('page_view', { page_location: location.origin + location.pathname, page_title: document.title, page_type: kind });
+    ga(kind === 'game' ? 'game_page_view' : 'home_page_view');
+  }
+  const tracker = new Tracker(kind, clock(), ga);
+  tracker.visible = document.visibilityState === 'visible';
+  const state = event => tracker.game(event.detail, clock());
+  window.addEventListener('atc:state', state);
+  if (window.__ATC_GAME_STATE__) tracker.game(window.__ATC_GAME_STATE__, clock());
+  let flush = () => {};
+  const environment = patch => { tracker.environment(patch, clock()); void flush(); };
+  for (const type of ['pointerdown', 'pointermove', 'keydown', 'touchstart', 'wheel'])
+    window.addEventListener(type, event => { if (event.isTrusted) tracker.input(clock()); }, { passive: true });
+  document.addEventListener('visibilitychange', () => environment({ visible: document.visibilityState === 'visible' }));
+  window.addEventListener('offline', () => environment({ connected: false }));
+  window.addEventListener('pagehide', event => {
+    tracker.tick(clock());
+    if (!event.persisted) tracker.finish('pagehide', clock());
+    stopped = true;
+    environment({ visible: false }); // Best effort only; disconnect + lease is authoritative.
+  });
+  window.addEventListener('pageshow', e => {
+    if (!e.persisted) return;
+    stopped = false; environment({ visible: document.visibilityState === 'visible' });
+    if (window.__ATC_GAME_STATE__) tracker.game(window.__ATC_GAME_STATE__, clock());
+  });
+  setInterval(() => {
+    // Catch gamepads without changing the game's input loop.
+    if (navigator.getGamepads?.().some(p => p && (p.buttons.some(b => b.pressed) || p.axes.some(a => Math.abs(a) > .2)))) tracker.input(clock());
+    const wasActive = tracker.previousActive; tracker.tick(clock());
+    if (wasActive !== tracker.previousActive) void flush();
+  }, 1000);
+  async function connect() {
+  try {
+    const base = 'https://www.gstatic.com/firebasejs/12.4.0/';
+    const [appSDK, authSDK, dbSDK] = await Promise.all([
+      import(base + 'firebase-app.js'), import(base + 'firebase-auth.js'), import(base + 'firebase-database.js')
+    ]);
+    const app = appSDK.getApps().find(a => a.name === 'atc-visitors') || appSDK.initializeApp(config.firebase, 'atc-visitors');
+    if (config.appCheckSiteKey && !appCheckReady) {
+      const ac = await import(base + 'firebase-app-check.js');
+      ac.initializeAppCheck(app, { provider: new ac.ReCaptchaV3Provider(config.appCheckSiteKey), isTokenAutoRefreshEnabled: true });
+      appCheckReady = true;
+    }
+    const auth = authSDK.getAuth(app);
+    const login = async () => {
+      await auth.authStateReady();
+      if (!auth.currentUser) await authSDK.signInAnonymously(auth);
+      return auth.currentUser;
+    };
+    // Firebase persistence shares identity; the lock prevents simultaneous first-visit signup races.
+    const user = navigator.locks ? await navigator.locks.request('atc-anonymous-signin', login) : await login();
+    if (!user?.isAnonymous) throw new Error('Visitor identity must be anonymous');
+    const db = dbSDK.getDatabase(app), presence = dbSDK.ref(db, 'presence/' + tab);
+    let hasConnected = false;
+    dbSDK.onValue(dbSDK.ref(db, '.info/serverTimeOffset'), s => {
+      const next = Number(s.val()) || 0;
+      if (Math.abs(next - offset) > 1000) {
+        const delta = next - offset; tracker.lastWall += delta; tracker.lastInput += delta;
+        if (!hasConnected) {
+          const values = Object.values(tracker.records); tracker.records = {};
+          const r = tracker.record(Date.now() + next);
+          for (const v of values) { r.player ||= v.player; r.starts += v.starts; r.ends += v.ends; r.views += v.views || 0; }
+        }
+      }
+      offset = next;
+    });
+    const sent = {};
+    flush = async () => {
+      if (!connected || !presenceReady || flushing) return;
+      flushing = true;
+      try {
+        tracker.tick(clock());
+        const active = !stopped && tracker.active(clock());
+        // Use an estimated server time (not serverTimestamp), so queued writes cannot resurrect old activity.
+        if (active) {
+          await dbSDK.set(presence, { uid: user.uid, lastSeen: clock(), active: true });
+          presencePublished = true;
+        } else if (presencePublished) { await dbSDK.remove(presence); presencePublished = false; }
+        for (const [day, values] of Object.entries(tracker.records)) {
+          if (Number(day) < Number(dayKey(clock())) - DAY) { delete tracker.records[day]; delete sent[day]; continue; }
+          const serialized = JSON.stringify(values);
+          if (sent[day] === serialized) continue;
+          // Never queue a new write when a known disconnect occurs.
+          if (!connected) break;
+          await dbSDK.set(dbSDK.ref(db, `activity/${day}/${user.uid}/${tab}`), { ...values, updatedAt: clock() });
+          sent[day] = serialized;
+        }
+      } catch (error) { console.warn('[ATC statistics] Write failed; will retry', error.code || error.message); }
+      finally { flushing = false; }
+    };
+    let connectionEpoch = 0;
+    dbSDK.onValue(dbSDK.ref(db, '.info/connected'), async snapshot => {
+      const epoch = ++connectionEpoch;
+      connected = snapshot.val() === true; presenceReady = false; presencePublished = false;
+      tracker.environment({ connected: false }, clock());
+      if (!connected) return;
+      try {
+        // Register on the server BEFORE publishing presence, and re-register on every reconnect.
+        await dbSDK.onDisconnect(presence).remove();
+        if (epoch !== connectionEpoch) return;
+        hasConnected = true; presenceReady = true; tracker.environment({ connected: true }, clock());
+        await flush();
+      } catch (error) { console.warn('[ATC statistics] Presence unavailable', error.code || error.message); }
+    });
+    // 30 seconds balances freshness, write volume and free quota consumption.
+    setInterval(() => void flush(), 30000);
+    window.addEventListener('atc:state', () => void flush());
+  } catch (error) {
+    console.warn('[ATC statistics] Service unavailable; retrying in 30 seconds', error.code || error.message);
+    setTimeout(() => { if (!stopped) void connect(); }, 30000);
+  }
+  }
+  void connect();
+})();
+</script>
 </head>
 <body>
   <div id="root"></div>
@@ -1944,6 +2160,76 @@ html[lang="en"] .cmd-block-label {
     module.exports.default = window.__MINI_REACT_DOM__;
   };
 
+
+  modules["audio/builtinSpeech"] = function(module, exports, require) {
+    const React = window.__MINI_REACT__;
+    "use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.cancelBuiltinSpeech = cancelBuiltinSpeech;
+exports.synthesizeBuiltin = synthesizeBuiltin;
+// Main-thread bridge to the separately licensed synthesis worker.
+let worker = null;
+let nextId = 0;
+const pending = new Map();
+function cancelBuiltinSpeech() {
+  // Terminate only if work is pending; otherwise keep the loaded voice pack warm.
+  if (!pending.size) return;
+  worker?.terminate();
+  worker = null;
+  for (const task of pending.values()) {
+    clearTimeout(task.timer);
+    task.reject(new Error('cancelled'));
+  }
+  pending.clear();
+}
+function synthesizeBuiltin(text, language, variant, rate) {
+  if (!worker) {
+    worker = new Worker(new URL('./voices/worker.js', document.baseURI), {
+      type: 'module'
+    });
+    worker.onmessage = ({
+      data
+    }) => {
+      const task = pending.get(data.id);
+      if (!task) return;
+      pending.delete(data.id);
+      clearTimeout(task.timer);
+      if (data.error) task.reject(new Error(data.error));else task.resolve({
+        samples: data.samples,
+        sampleRate: data.sampleRate
+      });
+    };
+    worker.onerror = () => {
+      for (const task of pending.values()) {
+        clearTimeout(task.timer);
+        task.reject(new Error('Voice engine failed to load'));
+      }
+      pending.clear();
+      worker?.terminate();
+      worker = null;
+    };
+  }
+  return new Promise((resolve, reject) => {
+    const id = ++nextId;
+    const timer = setTimeout(() => cancelBuiltinSpeech(), 45000);
+    pending.set(id, {
+      resolve,
+      reject,
+      timer
+    });
+    worker.postMessage({
+      id,
+      text,
+      language,
+      variant,
+      rate
+    });
+  });
+}
+  };
 
   modules["atc/voiceGuidance"] = function(module, exports, require) {
     const React = window.__MINI_REACT__;
@@ -2374,6 +2660,24 @@ Object.defineProperty(exports, "__esModule", {
 exports.EN_UI = void 0;
 // Display translations only. Simulation data, radio logs and speech input stay in their original language.
 const EN_UI = exports.EN_UI = {
+  '正在加载或合成内置男声': 'Loading or synthesizing the built-in male voice',
+  "无法启动内置男声": "Cannot start the built-in male voice",
+  "请点击试听重试": "Click Preview to try again",
+  "内置男声加载或播放失败": "Built-in male voice failed to load or play",
+  "请检查网络后点击试听重试": "Check your connection and click Preview again",
+  "使用内置合成男声": "Uses a built-in synthesized male voice",
+  "内置男声": "Built-in male voice",
+  "合成男声": "Synthesized male voice",
+  "无需系统男声": "No system male voice required",
+  "播报音色": "Speech voice",
+  "系统无男声时自动使用内置男声": "Uses a built-in male voice when the system has none",
+  "内置三种合成男声": "Three built-in synthesized male voices",
+  "不依赖系统音色": "Independent of system voices",
+  "可在下方选择并试听": "Select and preview below",
+  "内置男声首次播放需加载约": "The first built-in male preview loads about",
+  "音色资源": "of voice resources",
+  "带有电子合成音质": "with an electronic synthesized timbre",
+  "系统音色仍可选择": "System voices remain available",
   '当前未检测到对应性别': 'Requested voice gender not detected',
   '使用可用声音': 'using an available voice',
   '尚未提供当前语言的男声': 'has not provided a male voice for this language',
@@ -11198,8 +11502,10 @@ Object.defineProperty(exports, "__esModule", {
 exports.AUTO_MALE = exports.AUTO_FEMALE = void 0;
 exports.availableVoiceOptions = availableVoiceOptions;
 exports.browserVoices = browserVoices;
+exports.builtinVariant = builtinVariant;
 exports.chooseBrowserVoice = chooseBrowserVoice;
 exports.getVoiceOption = getVoiceOption;
+exports.hasSystemMale = hasSystemMale;
 exports.loadVoicePreferences = loadVoicePreferences;
 exports.normalizeVoiceProfile = normalizeVoiceProfile;
 exports.recommendedSpeechRate = recommendedSpeechRate;
@@ -11221,18 +11527,40 @@ function voiceLanguageMatches(voice, lang) {
   const code = voice.lang.toLowerCase().replace(/_/g, '-');
   return lang === 'EN' ? code.startsWith('en') : /^(zh($|-cn|-sg|-tw)|cmn)/.test(code);
 }
+function hasSystemMale(lang) {
+  return browserVoices().some(v => voiceLanguageMatches(v, lang) && voiceGender(`${v.name} ${v.voiceURI}`) === 'MALE');
+}
+function builtinVariant(profile, role, lang) {
+  const explicit = /^builtin:male:([123])$/.exec(profile.voiceURI || '');
+  if (explicit) return `m${explicit[1]}`;
+  const autoMale = profile.voiceURI === AUTO_MALE || !profile.voiceURI && role === 'PILOT';
+  return autoMale && !hasSystemMale(lang) ? 'm1' : null;
+}
 function availableVoiceOptions(lang) {
   const auto = female => ({
     voiceURI: female ? AUTO_FEMALE : AUTO_MALE,
     name: female ? '自动匹配女声' : '自动匹配男声',
-    description: browserVoices().some(v => voiceLanguageMatches(v, lang) && voiceGender(`${v.name} ${v.voiceURI}`) === (female ? 'FEMALE' : 'MALE')) ? '根据当前设备音色匹配' : '当前未检测到对应性别，使用可用声音',
+    description: !female && !hasSystemMale(lang) ? '使用内置合成男声' : '根据当前设备音色匹配',
     nativeLanguage: '',
     lang: lang === 'CN' ? 'zh-CN' : 'en-US',
     engine: 'browser',
     isFemale: female,
     gender: female ? 'FEMALE' : 'MALE'
   });
-  return [auto(true), auto(false), ...browserVoices().filter(v => voiceLanguageMatches(v, lang)).map(v => {
+  const builtins = [1, 2, 3].map(n => ({
+    voiceURI: `builtin:male:${n}`,
+    name: `内置男声 ${n}`,
+    description: '合成男声 · 无需系统男声',
+    nativeLanguage: '',
+    lang: lang === 'CN' ? 'zh-CN' : 'en-US',
+    engine: 'builtin',
+    isFemale: false,
+    gender: 'MALE'
+  }));
+  // Safari can list compact/enhanced duplicates under the same URI; keep one option.
+  const unique = new Map();
+  for (const v of browserVoices()) if (voiceLanguageMatches(v, lang)) unique.set(v.voiceURI, v);
+  return [auto(true), auto(false), ...builtins, ...Array.from(unique.values()).map(v => {
     const gender = voiceGender(`${v.name} ${v.voiceURI}`);
     return {
       voiceURI: v.voiceURI,
@@ -11242,7 +11570,7 @@ function availableVoiceOptions(lang) {
       nativeLanguage: v.lang,
       isFemale: gender === 'FEMALE',
       gender,
-      description: `${v.lang} · ${gender === 'UNKNOWN' ? '性别未标注' : gender === 'FEMALE' ? '推测女声' : '推测男声'} · ${v.localService ? '设备声音' : '浏览器联网声音'}`
+      description: `${v.lang} · ${gender === 'UNKNOWN' ? '性别未标注' : gender === 'FEMALE' ? '推测女声' : '推测男声'}`
     };
   })];
 }
@@ -11262,7 +11590,7 @@ function recommendedSpeechRate(lang) {
   return lang === 'CN' ? 1.15 : 1.05;
 }
 function resolveVoiceIdForLanguage(profile, role, _lang) {
-  return profile.voiceURI?.startsWith('browser:') || browserVoices().some(v => v.voiceURI === profile.voiceURI) ? profile.voiceURI : role === 'ATC' ? AUTO_FEMALE : AUTO_MALE;
+  return /^builtin:male:[123]$/.test(profile.voiceURI || '') || profile.voiceURI?.startsWith('browser:') || browserVoices().some(v => v.voiceURI === profile.voiceURI) ? profile.voiceURI : role === 'ATC' ? AUTO_FEMALE : AUTO_MALE;
 }
 function normalizeVoiceProfile(current, patch, role, oldLang, nextLang) {
   const memory = {
@@ -11346,6 +11674,7 @@ Object.defineProperty(exports, "resolveVoiceIdForLanguage", {
   }
 });
 exports.soundEngine = void 0;
+var _builtinSpeech = require("audio/builtinSpeech");
 var _voiceRecognizer = require("atc/voiceRecognizer");
 var _voiceCatalog = require("audio/voiceCatalog");
 const VHF_GAIN_MAP = {
@@ -11385,10 +11714,18 @@ class AtcSoundEngine {
     lastLatencyMs: 0,
     endpointUrl: ''
   };
+  builtinStatus = '';
+  getBuiltinSpeechStatus() {
+    return this.builtinStatus;
+  }
+  updateBuiltinStatus(message) {
+    this.builtinStatus = message;
+    if (typeof window !== 'undefined' && typeof window.dispatchEvent === 'function') window.dispatchEvent(new Event('atc-voice-status'));
+  }
   getBrowserSpeechCapabilities() {
     const scope = typeof window === 'undefined' ? {} : window;
     return {
-      synthesis: Boolean(scope.speechSynthesis),
+      synthesis: Boolean(scope.speechSynthesis || scope.Worker && (scope.AudioContext || scope.webkitAudioContext)),
       recognition: Boolean(scope.SpeechRecognition || scope.webkitSpeechRecognition),
       secure: Boolean(scope.isSecureContext),
       voices: (0, _voiceCatalog.browserVoices)().length
@@ -11427,6 +11764,8 @@ class AtcSoundEngine {
   }
   stopAllSpeech() {
     this.speechGenerationId += 1;
+    (0, _builtinSpeech.cancelBuiltinSpeech)();
+    this.updateBuiltinStatus('');
     this.stopContinuousVhfStatic();
     if (this.activeBufferSource) {
       try {
@@ -11772,10 +12111,65 @@ class AtcSoundEngine {
     const profile = role === 'ATC' ? settings.atcVoice : settings.pilotVoice;
     void this.playViaBrowserSpeech(sampleText, settings.ttsLanguage, profile, role, vhfLevel, dryPlayback);
   }
+  async playBuiltinSpeech(rawText, lang, profile, role, variant, level, dry) {
+    const generation = this.speechGenerationId;
+    const ctx = this.ensureContext();
+    if (!ctx) {
+      this.aiStatus.lastTtsError = '无法启动内置男声，请点击试听重试';
+      this.updateBuiltinStatus('');
+      return;
+    }
+    this.lastSpokenPhoneticPreview = (0, _voiceRecognizer.formatKokoroAviationPhonetics)(rawText, lang);
+    this.aiStatus.lastTtsError = '';
+    this.updateBuiltinStatus('正在加载或合成内置男声…');
+    try {
+      const audio = await (0, _builtinSpeech.synthesizeBuiltin)(this.lastSpokenPhoneticPreview, lang, variant, Number.isFinite(profile.rate) ? profile.rate : (0, _voiceCatalog.recommendedSpeechRate)(lang));
+      if (generation !== this.speechGenerationId || this.muted) return;
+      this.updateBuiltinStatus('');
+      const buffer = ctx.createBuffer(1, audio.samples.length, audio.sampleRate);
+      buffer.getChannelData(0).set(audio.samples);
+      await new Promise(resolve => {
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        source.connect(ctx.destination);
+        this.activeBufferSource = source;
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          source.disconnect();
+          if (this.activeBufferSource === source) this.activeBufferSource = null;
+          if (this.finishBrowserSpeech === finish) this.finishBrowserSpeech = null;
+          this.stopContinuousVhfStatic(role, dry ? 'OFF' : level);
+          resolve();
+        };
+        source.onended = finish;
+        this.finishBrowserSpeech = finish;
+        try {
+          source.start();
+          this.aiStatus.lastTtsError = '';
+          if (!dry && level !== 'OFF') {
+            this.playVhfSquelchBurst('START', role, level);
+            this.startContinuousVhfStatic(role, level, buffer.duration + 1);
+          }
+        } catch {
+          finish();
+          throw new Error('Audio playback failed');
+        }
+      });
+    } catch (error) {
+      if (generation === this.speechGenerationId) {
+        this.aiStatus.lastTtsError = '内置男声加载或播放失败，请检查网络后点击试听重试；通话文字已保留';
+        this.updateBuiltinStatus('');
+      }
+    }
+  }
 
-  /** Browser synthesis uses one pinned voice per role, language and selection. */
+  /** Use the bundled male engine when Safari provides no male voice. */
   async playViaBrowserSpeech(rawText, lang, profile, role, level = 'MEDIUM', dry = false) {
     if (!rawText || typeof window === 'undefined') return;
+    const variant = (0, _voiceCatalog.builtinVariant)(profile, role, lang);
+    if (variant) return this.playBuiltinSpeech(rawText, lang, profile, role, variant, level, dry);
     const synth = window.speechSynthesis,
       generation = this.speechGenerationId;
     if (!synth || !window.SpeechSynthesisUtterance) {
@@ -12774,6 +13168,43 @@ function drawScaleAndWindIndicator(ctx, width, height, pxPerNM, weather, activeD
 }
   };
 
+  modules["game/analytics"] = function(module, exports, require) {
+    const React = window.__MINI_REACT__;
+    "use strict";
+
+Object.defineProperty(exports, "__esModule", {
+  value: true
+});
+exports.markAnalyticsRound = markAnalyticsRound;
+exports.reportAnalyticsState = reportAnalyticsState;
+// Emit lifecycle metadata only. No dependency on a network SDK, and no effect on simulation state.
+let generation = 0;
+function markAnalyticsRound(state) {
+  generation++;
+  return state;
+}
+let previous = '';
+function reportAnalyticsState(state) {
+  if (typeof window === 'undefined' || typeof window.dispatchEvent !== 'function') return;
+  const detail = {
+    generation,
+    status: state.showPreGameLobby ? 'BRIEFING' : state.status,
+    paused: state.isPaused,
+    airport: state.settings.airportId,
+    difficulty: state.difficulty
+  };
+  const key = JSON.stringify(detail);
+  if (key === previous) return;
+  previous = key;
+  window.__ATC_GAME_STATE__ = detail;
+  try {
+    window.dispatchEvent(new CustomEvent('atc:state', {
+      detail
+    }));
+  } catch {/* Optional telemetry. */}
+}
+  };
+
   modules["game/store"] = function(module, exports, require) {
     const React = window.__MINI_REACT__;
     "use strict";
@@ -12788,6 +13219,7 @@ Object.defineProperty(exports, "formatAltitudeSpeechCn", {
   }
 });
 exports.useGameStore = useGameStore;
+var _analytics = require("game/analytics");
 var _missions = require("game/missions");
 var _language = require("i18n/language");
 var _react = require("react");
@@ -12877,7 +13309,7 @@ const DEFAULT_VIEWPORT = {
 class StoreContainer {
   listeners = new Set();
   constructor() {
-    const initialSim = (0, _engine.createInitialSimulationState)('NORMAL', false);
+    const initialSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('NORMAL', false));
     const initialCareer = loadCareerProfile();
     const voices = (0, _voiceCatalog.loadVoicePreferences)(initialSim.settings.atcVoice, initialSim.settings.pilotVoice);
     initialSim.settings = {
@@ -12894,7 +13326,7 @@ class StoreContainer {
         const mission = _missions.MISSIONS.find(item => item.id === id);
         if (!mission || !(0, _missions.isMissionUnlocked)(id, cur.missionProgress)) return;
         _soundEngine.soundEngine.stopAllSpeech();
-        const sim = (0, _missions.createMissionState)(mission, cur.settings);
+        const sim = (0, _analytics.markAnalyticsRound)((0, _missions.createMissionState)(mission, cur.settings));
         this.setState({
           ...sim,
           gameSpeed: 1,
@@ -13141,10 +13573,10 @@ class StoreContainer {
       setDifficulty: difficulty => {
         const cur = this.state;
         if (cur.showPreGameLobby) {
-          const freshSim = (0, _engine.createInitialSimulationState)(difficulty, false, {
+          const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(difficulty, false, {
             ...cur.settings,
             difficulty
-          });
+          }));
           this.setState({
             ...freshSim,
             gameSpeed: cur.gameSpeed,
@@ -13180,7 +13612,7 @@ class StoreContainer {
           (0, _voiceCatalog.saveVoicePreferences)(mergedSettings.atcVoice, mergedSettings.pilotVoice);
         }
         if (restartShift) {
-          const freshSim = (0, _engine.createInitialSimulationState)(mergedSettings.difficulty, !cur.showPreGameLobby, mergedSettings);
+          const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(mergedSettings.difficulty, !cur.showPreGameLobby, mergedSettings));
           this.setState({
             ...freshSim,
             gameSpeed: cur.gameSpeed,
@@ -13220,7 +13652,7 @@ class StoreContainer {
           ...cur.settings,
           ...newSettings
         };
-        const freshSim = (0, _engine.createInitialSimulationState)(mergedSettings.difficulty, true, mergedSettings);
+        const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(mergedSettings.difficulty, true, mergedSettings));
         _soundEngine.soundEngine.play('COMMAND');
         this.setState({
           ...freshSim,
@@ -13258,7 +13690,7 @@ class StoreContainer {
             enableRestrictedZones: true,
             enableEmergencies: true
           };
-          const sim = (0, _engine.createInitialSimulationState)('NORMAL', true, settings);
+          const sim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('NORMAL', true, settings));
           _soundEngine.soundEngine.play('COMMAND');
           this.setState({
             ...sim,
@@ -13286,7 +13718,7 @@ class StoreContainer {
             enableRestrictedZones: false,
             enableEmergencies: true
           };
-          let sim = (0, _engine.createInitialSimulationState)('NORMAL', true, settings);
+          let sim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('NORMAL', true, settings));
           sim = (0, _engine.spawnEmergencyFlightInState)(sim, 'SQUAWK_7700_FUEL');
           this.consumeSounds(sim.pendingSoundEvents, sim.pendingSpeechItems, true);
           this.setState({
@@ -13318,7 +13750,7 @@ class StoreContainer {
             enableRestrictedZones: true,
             enableEmergencies: true
           };
-          const sim = (0, _engine.createInitialSimulationState)('HARD', true, settings);
+          const sim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('HARD', true, settings));
           _soundEngine.soundEngine.play('COMMAND');
           this.setState({
             ...sim,
@@ -13352,10 +13784,10 @@ class StoreContainer {
           return;
         }
         const targetDiff = difficulty || cur.difficulty;
-        const freshSim = (0, _engine.createInitialSimulationState)(targetDiff, autoStart, {
+        const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)(targetDiff, autoStart, {
           ...cur.settings,
           difficulty: targetDiff
-        });
+        }));
         this.setState({
           ...freshSim,
           gameSpeed: cur.gameSpeed,
@@ -13564,7 +13996,7 @@ class StoreContainer {
           enableEmergencies: false,
           enableRookieCoach: true
         };
-        const freshSim = (0, _engine.createInitialSimulationState)('EASY', false, tutorialSettings);
+        const freshSim = (0, _analytics.markAnalyticsRound)((0, _engine.createInitialSimulationState)('EASY', false, tutorialSettings));
         freshSim.trafficCap = 3;
         freshSim.landedTarget = 2;
         freshSim.departedTarget = 1;
@@ -13801,6 +14233,7 @@ class StoreContainer {
       ...this.state,
       ...partial
     };
+    (0, _analytics.reportAnalyticsState)(this.state);
     this.listeners.forEach(l => l());
   };
   subscribe = listener => {
@@ -15497,7 +15930,11 @@ const GameModals = () => {
     void _soundEngine.soundEngine.checkLocalAiEngineHealth().then(() => setVoicesTick(n => n + 1));
     const update = () => setVoicesTick(n => n + 1);
     window.speechSynthesis?.addEventListener('voiceschanged', update);
-    return () => window.speechSynthesis?.removeEventListener('voiceschanged', update);
+    window.addEventListener('atc-voice-status', update);
+    return () => {
+      window.speechSynthesis?.removeEventListener('voiceschanged', update);
+      window.removeEventListener('atc-voice-status', update);
+    };
   }, [store.showSettingsModal]);
   const curatedVoices = _soundEngine.soundEngine.getAvailableVoices(s.ttsLanguage);
   const aiStatus = _soundEngine.soundEngine.getAiEngineStatus();
@@ -15584,7 +16021,7 @@ const GameModals = () => {
       })
     }, enabled ? '🔊 开启语音' : '🔇 仅文字')), /*#__PURE__*/_react2.default.createElement("label", {
       htmlFor: `${slug}-voice-select`
-    }, "\u6D4F\u89C8\u5668\u97F3\u8272"), /*#__PURE__*/_react2.default.createElement("select", {
+    }, "\u64AD\u62A5\u97F3\u8272"), /*#__PURE__*/_react2.default.createElement("select", {
       id: `${slug}-voice-select`,
       value: profile.voiceURI,
       "data-testid": `select-${slug}-voice-uri`,
@@ -15597,13 +16034,9 @@ const GameModals = () => {
     }, "\u5DF2\u4FDD\u5B58\u97F3\u8272\u6682\u4E0D\u53EF\u7528"), curatedVoices.map(v => /*#__PURE__*/_react2.default.createElement("option", {
       key: v.voiceURI,
       value: v.voiceURI
-    }, v.name, " \u2014 ", v.description))), role === 'PILOT' && !curatedVoices.some(v => !v.voiceURI.startsWith('browser:') && v.gender === 'MALE') && /*#__PURE__*/_react2.default.createElement("div", {
-      className: "voice-description",
-      role: "status",
-      "data-testid": "missing-male-voice"
-    }, store.uiLanguage === 'EN' ? 'Safari has not provided a male voice for this language. In iPad Settings → Accessibility → Read & Speak (or Spoken Content) → Voices, download a male voice, then return and refresh the voices. Availability depends on Safari.' : 'Safari 尚未提供当前语言的男声。可在 iPad 设置 → 辅助功能 → 朗读与语音（或朗读内容）→ 声音，下载男声后返回刷新音色；实际可用音色以 Safari 提供的列表为准。'), /*#__PURE__*/_react2.default.createElement("div", {
+    }, v.name, " \u2014 ", v.description))), /*#__PURE__*/_react2.default.createElement("div", {
       className: "voice-description"
-    }, role === 'ATC' ? '默认优先匹配女声' : '默认优先匹配男声', " \xB7 \u53EF\u8BD5\u542C\u540E\u81EA\u884C\u9009\u62E9"), /*#__PURE__*/_react2.default.createElement("div", {
+    }, role === 'ATC' ? '默认优先匹配女声' : '系统无男声时自动使用内置男声', " \xB7 \u53EF\u8BD5\u542C\u540E\u81EA\u884C\u9009\u62E9"), /*#__PURE__*/_react2.default.createElement("div", {
       className: "voice-rate-header"
     }, /*#__PURE__*/_react2.default.createElement("label", {
       htmlFor: `${slug}-voice-rate`
@@ -15915,10 +16348,12 @@ const GameModals = () => {
   }, /*#__PURE__*/_react2.default.createElement("h3", null, "\uD83C\uDF99\uFE0F \u6D4F\u89C8\u5668\u8BED\u97F3\u4E0E\u9EA6\u514B\u98CE"), /*#__PURE__*/_react2.default.createElement("div", {
     className: "ils-status-hint",
     "data-testid": "browser-speech-status"
-  }, /*#__PURE__*/_react2.default.createElement("div", null, "\u63A8\u8350\u4F7F\u7528\u6700\u65B0\u7248 Chrome\uFF1B\u5176\u4ED6\u6D4F\u89C8\u5668\u4EE5\u5B9E\u9645\u652F\u6301\u60C5\u51B5\u4E3A\u51C6\u3002"), /*#__PURE__*/_react2.default.createElement("div", null, _soundEngine.soundEngine.getBrowserSpeechCapabilities().recognition ? '当前浏览器提供语音识别接口' : '当前浏览器不支持语音识别，请使用文字输入或按钮'), /*#__PURE__*/_react2.default.createElement("div", null, "\u8BED\u97F3\u8BC6\u522B\u53EF\u80FD\u7531\u6D4F\u89C8\u5668\u5382\u5546\u8054\u7F51\u5904\u7406\uFF0C\u97F3\u9891\u53EF\u80FD\u53D1\u9001\u81F3\u5176\u670D\u52A1\uFF1B\u6309\u4F4F Shift \u5373\u5F00\u59CB\u8BC6\u522B\u3002"), /*#__PURE__*/_react2.default.createElement("div", null, "\u6CA1\u6709\u5339\u914D\u7684\u7537\u58F0\u6216\u5973\u58F0\u65F6\u4F7F\u7528\u5F53\u524D\u8BED\u8A00\u53EF\u7528\u97F3\u8272\uFF1B\u53EF\u5728\u4E0B\u65B9\u624B\u52A8\u9009\u62E9\u3002"), aiStatus.lastTtsError && /*#__PURE__*/_react2.default.createElement("div", {
+  }, /*#__PURE__*/_react2.default.createElement("div", null, "\u63A8\u8350\u4F7F\u7528\u6700\u65B0\u7248 Chrome\uFF1B\u5176\u4ED6\u6D4F\u89C8\u5668\u4EE5\u5B9E\u9645\u652F\u6301\u60C5\u51B5\u4E3A\u51C6\u3002"), /*#__PURE__*/_react2.default.createElement("div", null, _soundEngine.soundEngine.getBrowserSpeechCapabilities().recognition ? '当前浏览器提供语音识别接口' : '当前浏览器不支持语音识别，请使用文字输入或按钮'), /*#__PURE__*/_react2.default.createElement("div", null, "\u8BED\u97F3\u8BC6\u522B\u53EF\u80FD\u7531\u6D4F\u89C8\u5668\u5382\u5546\u8054\u7F51\u5904\u7406\uFF0C\u97F3\u9891\u53EF\u80FD\u53D1\u9001\u81F3\u5176\u670D\u52A1\uFF1B\u6309\u4F4F Shift \u5373\u5F00\u59CB\u8BC6\u522B\u3002"), /*#__PURE__*/_react2.default.createElement("div", null, "\u5185\u7F6E\u4E09\u79CD\u5408\u6210\u7537\u58F0\uFF0C\u4E0D\u4F9D\u8D56\u7CFB\u7EDF\u97F3\u8272\uFF1B\u53EF\u5728\u4E0B\u65B9\u9009\u62E9\u5E76\u8BD5\u542C\u3002"), _soundEngine.soundEngine.getBuiltinSpeechStatus() && /*#__PURE__*/_react2.default.createElement("div", {
+    role: "status"
+  }, _soundEngine.soundEngine.getBuiltinSpeechStatus()), aiStatus.lastTtsError && /*#__PURE__*/_react2.default.createElement("div", {
     role: "status"
   }, aiStatus.lastTtsError)), /*#__PURE__*/_react2.default.createElement("div", {
-    className: "setting-two-col"
+    className: "setting-two-col voice-control-grid"
   }, /*#__PURE__*/_react2.default.createElement("div", {
     className: "setting-row-block"
   }, /*#__PURE__*/_react2.default.createElement("span", {
@@ -15958,7 +16393,7 @@ const GameModals = () => {
       ttsLanguage: lang.id
     })
   }, lang.label))))), /*#__PURE__*/_react2.default.createElement("div", {
-    className: "setting-two-col"
+    className: "setting-two-col voice-roles-grid"
   }, voiceRoleSettings('ATC'), voiceRoleSettings('PILOT')), /*#__PURE__*/_react2.default.createElement("button", {
     type: "button",
     className: "btn-voice-preview",
@@ -15966,7 +16401,7 @@ const GameModals = () => {
     onClick: () => setVoicesTick(n => n + 1)
   }, store.uiLanguage === 'EN' ? 'Refresh voices' : '刷新系统音色'), /*#__PURE__*/_react2.default.createElement("div", {
     className: "voice-catalog-note"
-  }, "\u58F0\u97F3\u7531\u5F53\u524D\u6D4F\u89C8\u5668\u548C\u7CFB\u7EDF\u63D0\u4F9B\uFF0C\u65E0\u9700\u4E0B\u8F7D\u6E38\u620F\u6A21\u578B\u3002\u6027\u522B\u6839\u636E\u97F3\u8272\u540D\u79F0\u63A8\u6D4B\uFF0C\u4EE5\u8BD5\u542C\u4E3A\u51C6\u3002 \u97F3\u8272\u548C\u8BED\u901F\u6309\u4E2D\u82F1\u6587\u5206\u522B\u4FDD\u5B58\u3002\u6D4F\u89C8\u5668\u64AD\u62A5\u65E0\u6CD5\u5E94\u7528\u6E38\u620F\u7684\u7535\u53F0\u6EE4\u6CE2\uFF0C\u4ECD\u4FDD\u7559\u901A\u8BDD\u63D0\u793A\u97F3\u4E0E\u53EF\u8C03\u5E95\u566A\u3002"), /*#__PURE__*/_react2.default.createElement("div", {
+  }, "\u5185\u7F6E\u7537\u58F0\u9996\u6B21\u64AD\u653E\u9700\u52A0\u8F7D\u7EA6 3 MB \u97F3\u8272\u8D44\u6E90\uFF0C\u5E26\u6709\u7535\u5B50\u5408\u6210\u97F3\u8D28\uFF1B\u7CFB\u7EDF\u97F3\u8272\u4ECD\u53EF\u9009\u62E9\u3002 \u97F3\u8272\u548C\u8BED\u901F\u6309\u4E2D\u82F1\u6587\u5206\u522B\u4FDD\u5B58\u3002\u6D4F\u89C8\u5668\u64AD\u62A5\u65E0\u6CD5\u5E94\u7528\u6E38\u620F\u7684\u7535\u53F0\u6EE4\u6CE2\uFF0C\u4ECD\u4FDD\u7559\u901A\u8BDD\u63D0\u793A\u97F3\u4E0E\u53EF\u8C03\u5E95\u566A\u3002"), /*#__PURE__*/_react2.default.createElement("div", {
     className: "setting-row-block"
   }, /*#__PURE__*/_react2.default.createElement("div", {
     style: {
@@ -16425,23 +16860,6 @@ const App = () => {
   const commLogHeightPx = (0, _store.useGameStore)(s => s.commLogHeightPx);
   const shiftHeldRef = (0, _react.useRef)(false);
   const uiLanguage = (0, _store.useGameStore)(s => s.uiLanguage);
-  (0, _react.useEffect)(() => {
-    const updatePresence = () => {
-      const state = _store.useGameStore.getState();
-      const playing = !state.showPreGameLobby && state.status === 'RUNNING';
-      const scope = window;
-      if (scope.__ATC_PLAYING__ !== playing) {
-        scope.__ATC_PLAYING__ = playing;
-        window.dispatchEvent(new CustomEvent('atc-presence-state', {
-          detail: {
-            playing
-          }
-        }));
-      }
-    };
-    updatePresence();
-    return _store.useGameStore.subscribe(updatePresence);
-  }, []);
   (0, _react.useEffect)(() => {
     document.documentElement.lang = uiLanguage === 'EN' ? 'en' : 'zh-CN';
     document.title = (0, _language.uiText)('ATC2.0 · 空中交通管制模拟', uiLanguage).trim();

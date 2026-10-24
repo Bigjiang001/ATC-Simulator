@@ -28,14 +28,18 @@ async function check(name,fn){await fn();passed++;console.log('PASS: '+name);}
  const apple=[voices[0],{name:'Li-mu',voiceURI:'com.apple.voice.compact.zh-CN.Li-mu',lang:'zh-CN',localService:true},
  {name:'Yun Yang',voiceURI:'apple-yun',lang:'zh-CN',localService:true},{name:'中文',voiceURI:'com.apple.ttsbundle.siri_male_zh-CN_compact',lang:'zh-CN',localService:true}];
  currentVoices=apple;assert.equal(catalog.chooseBrowserVoice(pilot,'PILOT','CN').voiceURI,apple[1].voiceURI);
- assert.equal(catalog.availableVoiceOptions('CN').filter(v=>!v.voiceURI.startsWith('browser:')&&v.gender==='MALE').length,3);
+ assert.equal(catalog.availableVoiceOptions('CN').filter(v=>v.engine==='browser'&&!v.voiceURI.startsWith('browser:')&&v.gender==='MALE').length,3);
  assert.equal(catalog.chooseBrowserVoice({...pilot,voiceURI:'ting'},'PILOT','CN').voiceURI,'ting');
  assert.equal(catalog.voiceGender('Kathleen'),'UNKNOWN');currentVoices=voices;
  });
- await check('Late Safari male voices replace an earlier female fallback, with normal pitch',async()=>{
- currentVoices=[voices[0]];soundEngine.previewRoleVoice('PILOT',settings);await wait(10);assert.equal(spoken.at(-1).voice.voiceURI,'ting');
- currentVoices=[voices[0],{name:'Li-mu',voiceURI:'apple-li',lang:'zh-CN',localService:true}];
- soundEngine.previewRoleVoice('PILOT',settings);await wait(10);assert.equal(spoken.at(-1).voice.voiceURI,'apple-li');assert.equal(spoken.at(-1).pitch,1);currentVoices=voices;
+ await check('No system male selects the bundled engine; installed voices and manual choices take priority',async()=>{
+ currentVoices=[voices[0]];assert.equal(catalog.builtinVariant(pilot,'PILOT','CN'),'m1');
+ assert.equal(catalog.builtinVariant({...pilot,voiceURI:'builtin:male:3'},'PILOT','CN'),'m3');
+ assert.equal(catalog.builtinVariant({...pilot,voiceURI:'ting'},'PILOT','CN'),null);
+ assert.equal(catalog.availableVoiceOptions('CN').filter(v=>v.engine==='builtin').length,3);
+ currentVoices=voices;assert.equal(catalog.builtinVariant(pilot,'PILOT','CN'),null);
+ const selected={...pilot,voiceURI:'builtin:male:2'};
+ assert.equal(catalog.resolveVoiceIdForLanguage(selected,'PILOT','CN'),'builtin:male:2');
  });
  await check('Role previews use selected browser voices and aviation phonetics',async()=>{
  soundEngine.previewRoleVoice('ATC',settings);await wait(10);soundEngine.previewRoleVoice('PILOT',settings);await wait(10);
