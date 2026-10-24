@@ -9,3 +9,11 @@
 语音设置两列的下拉框固定为 38px，移除 flex 拉伸，统一标题、说明、滑块和试听按钮的行高。窄屏改为单列。系统音色仍可通过“刷新系统音色”更新。
 
 验证命令：npm run typecheck、npm test、npm run test:ui、npm --prefix online run test:ipad、npm --prefix online run test:voices。独立语音浏览器测试模拟系统只有婷婷/美嘉，检查三种内置男声实际生成不同的非静音 PCM、自动回退、试听打断、重载保存、重复音色去重以及横竖屏两列对齐。本次 Chromium 和 Playwright WebKit 的横竖屏语音与布局测试均通过。设置 ATC_TEST_ENGINE=webkit 可重复 WebKit 测试。未连接实体 iPad。
+
+## 内置男声的 Safari 播放恢复
+
+网页使用 AudioSession 可用时将语音输出设为 playback，避免默认环境音频会话在 iPad 静音模式下抑制 Web Audio。首次点击和键盘操作直接解锁输出，随后再等待异步男声合成。播放前必须确认 AudioContext 已进入 running；suspended 和 Safari 的 interrupted 状态都会尝试恢复，closed 状态则重建。恢复仍未完成时显示“声音播放尚未恢复，请再次点击试听”，不会把 source.start() 调用当作已经发声。麦克风识别期间不会强行切换其会话。
+
+回归测试除合成数据外，还用浏览器 AnalyserNode 检查实际输出图有非静音信号，并检查音频时钟推进、running 状态和 playback 会话。另有可控状态测试覆盖恢复延迟、麦克风/应用中断、恢复被阻止、恢复期间取消，以及关闭后的重建。WebKit 和 Chromium 的横竖屏测试均通过；仍未连接实体 iPad，无法直接测量设备扬声器。
+
+相关平台行为与会话设置参考 WebKit：https://bugs.webkit.org/show_bug.cgi?id=251532 。

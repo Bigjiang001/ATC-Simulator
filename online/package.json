@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-standalone.cjs",
-    "test": "node scripts/run-unit-tests.cjs && node scripts/test-gameplay.cjs && node scripts/test-ui-language.cjs && node scripts/test-browser-speech.cjs && node scripts/test-builtin-engine.mjs",
+    "test": "node scripts/run-unit-tests.cjs && node scripts/test-gameplay.cjs && node scripts/test-ui-language.cjs && node scripts/test-browser-speech.cjs && node scripts/test-builtin-engine.mjs && node scripts/test-safari-audio-state.cjs",
     "test:ui": "node scripts/test-browser-ui.cjs",
     "typecheck": "tsc --noEmit",
     "test:ipad": "node scripts/build-standalone.cjs && node scripts/test-ipad-touch.cjs",

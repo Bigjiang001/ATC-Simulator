@@ -419,9 +419,43 @@ class AtcSoundEngine {
           : `TURN LEFT HEADING 270, DESCEND AND MAINTAIN ${altEn}, CLEARED ILS RUNWAY 09L, B9001.`;
 
     this.stopAllSpeech();
+    // Called directly by the tap handler, before any worker/network await.
+    this.prepareAudioPlayback();
     const vhfLevel = settings.vhfStaticLevel || 'MEDIUM';
     const profile = role === 'ATC' ? settings.atcVoice : settings.pilotVoice;
     void this.playViaBrowserSpeech(sampleText, settings.ttsLanguage, profile, role, vhfLevel, dryPlayback);
+  }
+
+  /** Unlock in the original pointer/key gesture, before asynchronous synthesis. */
+  public prepareAudioPlayback(): void {
+    if (this.recognitionSession && !this.recognitionSession.ended) return;
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    // A one-frame silent source unlocks older iPad Safari's Web Audio output.
+    if ((ctx.state as string) !== 'running') {
+      try {
+        const source = ctx.createBufferSource(); source.buffer = ctx.createBuffer(1, 1, ctx.sampleRate);
+        source.connect(ctx.destination); source.onended = () => source.disconnect(); source.start(0);
+      } catch { /* Readiness is checked again before audible playback. */ }
+    }
+  }
+
+  private async waitForPlaybackContext(ctx: AudioContext): Promise<void> {
+    if ((ctx.state as string) === 'running') return;
+    await new Promise<void>((resolve, reject) => {
+      let finished = false;
+      const finish = (error?: Error) => {
+        if (finished) return; finished = true;
+        clearTimeout(timer); ctx.removeEventListener('statechange', changed);
+        error ? reject(error) : resolve();
+      };
+      const changed = () => { if ((ctx.state as string) === 'running') finish(); };
+      const timer = setTimeout(() => finish(new Error('AUDIO_NOT_RUNNING')), 4000);
+      ctx.addEventListener('statechange', changed);
+      try { void ctx.resume().then(changed, () => finish(new Error('AUDIO_NOT_RUNNING'))); }
+      catch { finish(new Error('AUDIO_NOT_RUNNING')); }
+      changed();
+    });
   }
 
   private async playBuiltinSpeech(rawText: string, lang: 'CN' | 'EN', profile: VoiceProfileConfig,
@@ -434,6 +468,9 @@ class AtcSoundEngine {
     this.updateBuiltinStatus('正在加载或合成内置男声…');
     try {
       const audio = await synthesizeBuiltin(this.lastSpokenPhoneticPreview, lang, variant, Number.isFinite(profile.rate) ? profile.rate : recommendedSpeechRate(lang));
+      if (generation !== this.speechGenerationId || this.muted) return;
+      // Safari may still be suspended, or interrupted by microphone/background use.
+      await this.waitForPlaybackContext(ctx);
       if (generation !== this.speechGenerationId || this.muted) return;
       this.updateBuiltinStatus('');
       const buffer = ctx.createBuffer(1, audio.samples.length, audio.sampleRate);
@@ -453,7 +490,12 @@ class AtcSoundEngine {
         } catch { finish(); throw new Error('Audio playback failed'); }
       });
     } catch (error) {
-      if (generation === this.speechGenerationId) { this.aiStatus.lastTtsError = '内置男声加载或播放失败，请检查网络后点击试听重试；通话文字已保留'; this.updateBuiltinStatus(''); }
+      if (generation === this.speechGenerationId) {
+        this.aiStatus.lastTtsError = error instanceof Error && error.message === 'AUDIO_NOT_RUNNING'
+          ? '声音播放尚未恢复，请再次点击试听；若刚使用麦克风或切换应用，请返回页面后再试'
+          : '内置男声加载或播放失败，请检查网络后点击试听重试；通话文字已保留';
+        this.updateBuiltinStatus('');
+      }
     }
   }
 
@@ -498,14 +540,20 @@ class AtcSoundEngine {
       window.AudioContext ||
       (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     if (!AudioCtx) return null;
-    if (!this.ctx) {
+    // iPad's default ambient session can mute Web Audio while system TTS remains audible.
+    try {
+      const session = typeof navigator === 'undefined' ? undefined : (navigator as Navigator & { audioSession?: { type: string } }).audioSession;
+      if (session && session.type !== 'playback' && (!this.recognitionSession || this.recognitionSession.ended)) session.type = 'playback';
+    } catch { /* Older browsers do not expose AudioSession. */ }
+    if (!this.ctx || (this.ctx.state as string) === 'closed') {
+      this.noiseBuffer = null;
       try {
         this.ctx = new AudioCtx();
       } catch {
         return null;
       }
     }
-    if (this.ctx.state === 'suspended') {
+    if ((this.ctx.state as string) !== 'running') {
       this.ctx.resume().catch(() => {});
     }
     return this.ctx;

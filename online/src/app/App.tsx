@@ -19,6 +19,17 @@ export const App: React.FC = () => {
     document.title = uiText('ATC2.0 · 空中交通管制模拟', uiLanguage).trim();
   }, [uiLanguage]);
 
+  useEffect(() => {
+    const unlock = () => soundEngine.prepareAudioPlayback();
+    // Capture keeps resume() in the trusted gesture, even when a command queues speech later.
+    window.addEventListener('pointerdown', unlock, { capture: true, passive: true });
+    window.addEventListener('keydown', unlock, { capture: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock, true);
+      window.removeEventListener('keydown', unlock, true);
+    };
+  }, []);
+
   // 固定步长模拟时钟；浏览器语音能力检测不发起网络请求。
   useEffect(() => {
     let lastTick = performance.now();

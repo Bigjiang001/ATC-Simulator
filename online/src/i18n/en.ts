@@ -1,5 +1,10 @@
 // Display translations only. Simulation data, radio logs and speech input stay in their original language.
 export const EN_UI: Record<string, string> = {
+  '声音播放尚未恢复': 'Audio playback has not resumed',
+  '请再次点击试听': 'Tap Preview again',
+  '若刚使用麦克风或切换应用': 'If you just used the microphone or switched apps',
+  '请返回页面后再试': 'return to the page and try again',
+
   '正在加载或合成内置男声': 'Loading or synthesizing the built-in male voice',
   "无法启动内置男声": "Cannot start the built-in male voice",
   "请点击试听重试": "Click Preview to try again",
